@@ -5,6 +5,10 @@ import { unlock, setMusic, setVolume, sfx } from './audio.ts'
 import { ChipDefs, Header, LiveBoard, Leaders, Facts, Ticker, Toast, Final, Home, Ambient } from './Board.tsx'
 import { PlayerSheet, AddSheet, NewNight, LogSheet, SettleSheet, HistorySheet, SettingsSheet } from './Sheets.tsx'
 import './index.css'
+import history from '../history.json?raw'
+
+// A browser with nothing saved (e.g. the Pages site) starts from the committed history.
+if (!localStorage.getItem('poker-live')) localStorage.setItem('poker-live', history)
 
 type SheetKind = 'add' | 'new' | 'log' | 'settle' | 'history' | 'settings'
 type Open = { kind: 'player'; id: string; back?: SheetKind } | { kind: SheetKind } | null
