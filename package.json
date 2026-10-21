@@ -1,0 +1,20 @@
+{
+  "name": "poker-live",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "vite --port 5199 --strictPort --open",
+    "build": "tsc && vite build",
+    "test": "node --test src/*.test.ts"
+  },
+  "dependencies": {
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.4"
+  }
+}
