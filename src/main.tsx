@@ -1,8 +1,8 @@
 import { StrictMode, useEffect, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
-import { load, save, live, ended, facts, leaderboard, profitSeries, payments, announce, usd, roll, ink, type News, type Mut, type Who } from './data.ts'
+import { load, save, live, ended, lines, facts, leaderboard, profitSeries, payments, announce, usd, roll, ink, type News, type Mut, type Who } from './data.ts'
 import { unlock, setMusic, setVolume, setSkin, sfx } from './audio.ts'
-import { vars, ChipDefs, Header, LiveBoard, Leaders, Facts, Ticker, Toast, Final, Home, Ambient } from './Board.tsx'
+import { vars, ChipDefs, Header, LiveBoard, Leaders, Facts, Ticker, Toast, Final, Home, Ambient, Side } from './Board.tsx'
 import { Skin, Boot, Figlet, MatrixRain } from './Term.tsx'
 import { PlayerSheet, AddSheet, NewNight, LogSheet, SettleSheet, HistorySheet, SettingsSheet, SeatsSheet, EquitySheet } from './Sheets.tsx'
 import './index.css'
@@ -184,6 +184,7 @@ function App() {
             <Home onStart={() => setSheet({ kind: 'new' })} nights={history.length} players={data.players.length} />
           )}
         </main>
+        {term && night && !final && cur === 'board' && lines(night).length <= 8 && <Side night={night} who={who} now={now} />}
         {awake || sheet ? (
           <nav className="toolbar">
             {night && final ? (
@@ -211,7 +212,7 @@ function App() {
             <span className="sep" />
             <button className={data.settings.music ? 'tb' : 'tb muted'} onClick={() => mut(d => void (d.settings.music = !d.settings.music))} aria-label="Toggle music">
               <i>♪</i>
-              {data.settings.music ? 'Jazz' : 'Off'}
+              {data.settings.music ? (term ? 'Synth' : 'Jazz') : 'Off'}
             </button>
             <input type="range" min={0} max={1} step={0.05} value={data.settings.volume} aria-label="Volume" onChange={e => mut(d => void (d.settings.volume = +e.target.value))} />
             <T icon="⛶" label="Full" on={fullscreen} />

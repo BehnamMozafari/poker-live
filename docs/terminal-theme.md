@@ -32,6 +32,7 @@ dealer@felt:~/nights$ ./live --night thursday █                    uptime 2h14
 - **Header → shell prompt:** `dealer@felt:~/nights$ ./live --night thursday █`, with `uptime 2h14m  21:04` on the right. With no night, it reads `~$ █`.
 - **Quote → htop-style top pane:** the big price stays (mono, green glow). Stats become one line: `open 19:02 │ high $450 │ volume $900 │ seated 6/7`.
 - **Panels → panes:** `main.panel` gets `data-title` (`positions`, `leaderboard`, `story`, `results`, `settle`), drawn as a fieldset-style title notched into a 1px border.
+- **tmux split (added 2026-10-23):** the prompt and status line span the screen. On the live board (8 players or fewer) the right column holds two more panes: `htop` (each player's money in as a `[||||   ]` meter scaled to the biggest, `tasks: 5 seated, 1 exited`, `load average:` buy-ins in the last 15/30/60 minutes) and `tail -f night.log` (tonight's events as `21:03:44 > alex.rebuy($50)`, newest typing in). Other panes take the full width.
 - **Ticker → tmux status line:** `[poker] 0:board* 1:leaders 2:facts` on the left (the idle rotation shown as windows, `*` = current), the same scrolling facts in the middle, `⏱ armed` (when the secret timer is set; never the time left) and the clock on the right.
 - **Dock → vim command line:** `:` prompt, then `[+player] [undo] [log] [end]…` as bracketed text buttons. The primary button is reverse video. Icons are hidden.
 - **Sheets → windows:** title bar `┌─ settings ───[x]┐`, inputs prefixed `>`, buttons `[ enter ] confirm`, primary reverse video, `h3` → `# section` comment style.
@@ -43,7 +44,7 @@ dealer@felt:~/nights$ ./live --night thursday █                    uptime 2h14
 | SVG chip stack | `█` per buy-in, in groups of five (`█████ ██`); a new block types in with a key tick |
 | Toast card | `stdout` box at top right: `> alex.rebuy($50)  // 7th rebuy  [ OK ]` types out (CSS `steps()` on `ch` width, exact in mono), then holds and fades. Cash-out: `[ EXIT 0 ] +$120` green / `[ EXIT 1 ] −$60` red |
 | Row light sweep | Reverse video: the row fills with the player's colour and black text, then fades, plus the glitch |
-| Step chart | Same SVG: green line with a glow filter, dotted grid, readout `[t=21:04 px=$450]` |
+| Step chart | Text candlesticks of money in play (half-block bodies, `│` wicks, green up / red down, `─` when nothing happened) in 24 slots of 5-minute multiples, an amber volume row underneath, readout `[9:19 pm o=$648 h=$648 l=$581 c=$631 vol=$50]` |
 | Leader trend line | Text sparkline `▁▂▃▅▇▆█` |
 | Odds bar | Segmented block bar (repeating gradient, 1ch cells) that fills live, `67.3%` |
 | Seats oval | Dashed green oval; seats as identicon + `alex`; dealer = `[D]` |
@@ -68,12 +69,10 @@ dealer@felt:~/nights$ ./live --night thursday █                    uptime 2h14
   4. Payments as a diff: `- alex   $40  →  + sam`, with red `-` and green `+`.
 
 ## Sound
-The jazz stays the same in both themes. In Terminal, `sfx` routes to terminal versions:
-- buy-in: two rising square bleeps; rebuy: three.
-- cash-out: modem chirp (FM sweep + noise burst).
-- drumroll: fast square ticks rising in pitch.
-- crash/alarm: klaxon (saw, two tones alternating 3×).
-- tick + new `type(n)`: mechanical key clicks (short highpass noise), used by typed toasts, boot and decrypt.
+Revised 2026-10-23: the first bleeps and klaxons were too sharp. Terminal is now a mechanical keyboard, and has its own music.
+- **Keys:** each key is a low thock (a pitch-dropping sine plus muffled noise) with a soft click on top. Space and enter are deeper, with a stabilizer rattle. Typing is humanized: uneven gaps, a space every few keys, the odd hesitation.
+- **Events:** buy-in/rebuy = typing the command, then enter. Cash-out = typing, enter, and a second satisfied enter. Drumroll = typing that speeds up. Winner = one enter slam. Timer alarm = frantic key-mashing, then three enters. Tick = one key. `type(n)` types n keys (boot).
+- **Music:** Terminal swaps the jazz for a generated late-night synth (the dock button reads `synth`): straight 8ths at 92 bpm, minor progressions two bars a chord, detuned saw pads through a slowly sweeping resonant lowpass, a sub pumping on the offbeats, a kick, a keyboard backbeat with ghost keystrokes, and an echoing arp. Every 16 bars it picks a new progression, maybe a new key, and a new texture.
 
 ## Implementation
 **Files:** two new: `src/Term.tsx` (terminal-only pieces) and `src/terminal.css` (everything scoped under `[data-theme='terminal']`, imported after `index.css`). Quote's CSS is untouched.
@@ -89,4 +88,4 @@ The jazz stays the same in both themes. In Terminal, `sfx` routes to terminal ve
 
 **Reduced motion:** the existing CSS rule covers animations. The canvases (rain, char grid) and the typing/scramble effects check `prefers-reduced-motion` and render the final state.
 
-**Skipped:** a second music engine for Terminal (the jazz plays in both); more themes (the `Skin` context becomes a string when a third one lands).
+**Skipped:** more themes (the `Skin` context becomes a string when a third one lands).

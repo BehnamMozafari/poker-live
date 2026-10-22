@@ -3,7 +3,7 @@ import { CHIPS, ink, usd, ordinal, clock, dur, lines, delta, type Session, type 
 import type { Payment } from './settle.ts'
 import { sfx } from './audio.ts'
 import { Skin, Identicon, Tag, Blocks, Figlet, Scramble, Boot, MatrixRain, CharGrid } from './Term.tsx'
-import { spark, snake } from './term.ts'
+import { spark, snake, candles, candleRows } from './term.ts'
 
 export const vars = (o: Record<string, string | number>) => o as CSSProperties
 // Labels: as written in Quote, snake_case in Terminal (`alt` when the terminal word differs).
@@ -136,6 +136,9 @@ function Quote({ night, now }: { night: Session; now: number }) {
           ))}
         </dl>
       </div>
+      {term ? (
+        <Candles pts={pts} t0={t0} t1={t1} />
+      ) : (
       <div
         className="spark"
         onPointerMove={e => {
@@ -157,17 +160,36 @@ function Quote({ night, now }: { night: Session; now: number }) {
         <i className="tip" style={{ top: Y(cur) + '%' }} />
         {at && hover !== undefined && (
           <span className={hover > 75 ? 'cross flip' : 'cross'} style={vars({ left: hover + '%', '--y': Y(at[1]) + '%' })}>
-            {term ? (
-              <span className="num">{`[t=${clock(t0 + (hover / 100) * (t1 - t0))} px=${usd(at[1])}]`}</span>
-            ) : (
-              <span>
-                <b className="num">{usd(at[1])}</b>
-                {clock(t0 + (hover / 100) * (t1 - t0))}
-              </span>
-            )}
+            <span>
+              <b className="num">{usd(at[1])}</b>
+              {clock(t0 + (hover / 100) * (t1 - t0))}
+            </span>
           </span>
         )}
       </div>
+      )}
+    </div>
+  )
+}
+
+// Terminal: the night as text candlesticks (green closed up, red down) over a volume row. 24 slots of 5-minute multiples.
+const SLOTS = 24, ROWS = 8
+function Candles({ pts, t0, t1 }: { pts: [number, number][]; t0: number; t1: number }) {
+  const [hover, setHover] = useState<number>()
+  const w = 3e5 * Math.ceil((t1 - t0) / SLOTS / 3e5), cs = candles(pts, t0, w, Math.ceil((t1 - t0) / w))
+  const hi = Math.max(...cs.map(c => c.h)), vmax = Math.max(...cs.map(c => c.v)) || 1
+  const cls = cs.map(c => (c.h === c.l ? 'flat' : c.c >= c.o ? 'win' : 'loss')), at = hover === undefined ? undefined : cs[hover]
+  return (
+    <div className="spark candles" onPointerMove={e => { const r = e.currentTarget.getBoundingClientRect(); setHover(Math.min(SLOTS - 1, Math.max(0, Math.floor(((e.clientX - r.left) / r.width) * SLOTS)))) }} onPointerLeave={() => setHover(undefined)}>
+      <svg viewBox={`0 0 ${SLOTS * 2} ${ROWS + 1}`} preserveAspectRatio="none" aria-hidden>
+        {candleRows(cs, ROWS, hi).flatMap((row, r) => [...row].map((ch, k) => ch !== ' ' && <text key={r * SLOTS + k} x={k * 2 + 1} y={r + 0.85} className={cls[k]}>{ch}</text>))}
+        {cs.map((c, k) => c.v > 0 && <text key={'v' + k} x={k * 2 + 1} y={ROWS + 0.9} className="vol">{'▁▂▃▄▅▆▇█'[Math.ceil((c.v / vmax) * 8) - 1]}</text>)}
+      </svg>
+      {at && hover !== undefined && (
+        <span className={hover > 15 ? 'cross flip' : 'cross'} style={{ left: ((hover * 2 + 1) / (SLOTS * 2)) * 100 + '%' }}>
+          <span className="num">{`[${clock(t0 + hover * w)} o=${usd(at.o)} h=${usd(at.h)} l=${usd(at.l)} c=${usd(at.c)} vol=${usd(at.v)}]`}</span>
+        </span>
+      )}
     </div>
   )
 }
@@ -204,6 +226,54 @@ export function LiveBoard({ night, who, flash, onPick }: { night: Session; who: 
         )
       })}
     </div>
+  )
+}
+
+// Terminal's right-hand panes beside the board: htop meters (money in, scaled to the biggest, load = buy-ins in the
+// last 15/30/60 minutes) and a tail -f of tonight's log, the newest line typing in.
+export function Side({ night, who, now }: { night: Session; who: Who; now: number }) {
+  const ls = lines(night), top = Math.max(...ls.map(l => l.in), 1), W = 16, seen = new Set<string>()
+  const load = [15, 30, 60].map(m => night.events.filter(e => e.type === 'buyin' && now - e.t < m * 6e4).length)
+  const log = night.events.map(e => ({ e, verb: e.type !== 'buyin' ? e.type : seen.has(e.player) ? 'rebuy' : (seen.add(e.player), 'buyin') })).slice(-40)
+  return (
+    <aside className="side">
+      <section className="pane htop" data-title="htop">
+        {ls.map(l => {
+          const p = who(l.id), k = Math.round((l.in / top) * W)
+          return (
+            <div key={l.id} className={l.seated ? '' : 'out'} style={vars({ '--c': ink(p.color) })}>
+              <span className="nm">{p.name}</span>
+              <span>
+                [<i>{'|'.repeat(k)}</i>
+                {' '.repeat(W - k)}]
+              </span>
+              <b className="num">{usd(l.in)}</b>
+            </div>
+          )
+        })}
+        <p>
+          tasks: <b>{ls.filter(l => l.seated).length}</b> seated, {ls.filter(l => !l.seated).length} exited
+        </p>
+        <p>
+          load average: <b>{load.join(' ')}</b>
+        </p>
+      </section>
+      <section className="pane logp" data-title="tail -f night.log">
+        <div>
+        {log.map(({ e, verb }, i) => {
+          const p = who(e.player), txt = `${new Date(e.t).toLocaleTimeString('en-GB')} > ${p.name}.${verb}(${usd(e.cents)})`
+          return (
+            <div key={e.t + e.player} className={i === log.length - 1 ? 'type' : undefined} style={vars({ '--n': txt.length, '--c': ink(p.color) })}>
+              <span className="dim">{txt.slice(0, 11)}</span>
+              <span style={{ color: 'var(--c)' }}>{p.name}</span>
+              <span className={verb === 'cashout' ? 'win' : verb === 'rebuy' ? 'amber' : ''}>.{verb}</span>({usd(e.cents)})
+            </div>
+          )
+        })}
+        <i className="caret">█</i>
+        </div>
+      </section>
+    </aside>
   )
 }
 

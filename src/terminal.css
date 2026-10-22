@@ -56,6 +56,31 @@
   & .book span:nth-child(odd) { animation-duration: 1.3s; animation-delay: -0.4s; }
   & .book span:nth-child(3n) { animation-duration: 0.7s; }
 
+  /* ── tmux split: prompt and status line span the screen; on the board, htop + log panes take the right column ── */
+  & .hdr { display: contents; }
+  & .stage { grid-template: 'bar' auto 'quote' auto 'main' minmax(0, 1fr) 'foot' 2.6rem / minmax(0, 1fr); }
+  & .stage:has(> .side) { grid-template: 'bar bar' auto 'quote side' auto 'main side' minmax(0, 1fr) 'foot foot' 2.6rem / minmax(0, 1fr) 27rem; }
+  & .bar { grid-area: bar; }
+  & .quote { grid-area: quote; }
+  & .panel { grid-area: main; }
+  & :is(.ticker, .toolbar) { grid-area: foot; }
+  & .side { grid-area: side; display: flex; flex-direction: column; gap: 1.4rem; min-height: 0; animation: panelIn 0.9s var(--ease) both; }
+  & :is(.quote, .panel, .pane) { background: rgb(0 0 0 / 0.8); }
+  & .pane { position: relative; display: flex; flex-direction: column; min-height: 0; padding: 1.2rem 1.2rem 0.8rem; border: 1px solid var(--line2); font: 500 0.95rem/1.55 var(--mono); }
+  & .htop div { display: flex; white-space: pre; }
+  & .htop .nm { width: 9ch; overflow: hidden; text-overflow: ellipsis; color: var(--c); }
+  & .htop i { font-style: normal; color: var(--c); }
+  & .htop b { margin-left: auto; font-weight: 500; }
+  & .htop .out { opacity: 0.4; }
+  & .htop p { margin: 0; color: var(--dim); }
+  & .htop p:first-of-type { margin-top: 0.6rem; }
+  & .htop p b { color: var(--sys); font-weight: 500; }
+  & .logp { flex: 1; }
+  & .logp > div { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; overflow: hidden; }
+  & .logp > div > div { flex: none; white-space: pre; }
+  & .logp .amber { color: var(--amber); }
+  & .logp .caret { margin: 0; }
+
   /* ── header: shell prompt + htop-style quote pane ── */
   & .bar { font-size: 1rem; text-transform: none; }
   & .prompt { margin-right: auto; color: var(--fg); }
@@ -63,15 +88,21 @@
   & .prompt em { font-style: normal; color: #5fb4ff; }
   & .live i { border-radius: 0; }
   & .quote { position: relative; padding: 1.3rem 1.6rem 1rem; border: 1px solid var(--line2); }
-  & :is(.quote, .panel)::before { content: '─ ' attr(data-title) ' ─'; position: absolute; z-index: 1; top: 0; left: 1.2rem; translate: 0 -55%; padding: 0 0.4rem; background: var(--bg); font: 500 0.85rem var(--mono); color: var(--amber); }
+  & :is(.quote, .panel, .pane)::before { content: '─ ' attr(data-title) ' ─'; position: absolute; z-index: 1; top: 0; left: 1.2rem; translate: 0 -55%; padding: 0 0.4rem; background: var(--bg); font: 500 0.85rem var(--mono); color: var(--amber); }
   & .quote::before { content: '─ quote ─'; }
   & .price { margin: 0.2rem 0 0.7rem; font-size: 4.6rem; font-weight: 500; background: none; color: var(--sys); text-shadow: 0 0 1.2rem rgb(57 255 136 / 0.45); }
-  & .quote dl { gap: 0; }
+  & .quote { gap: 2.5rem; align-items: stretch; }
+  & .quote dl { display: grid; grid-template-columns: auto auto; gap: 0.2rem 1.6rem; }
   & .quote dl > div { display: flex; align-items: baseline; gap: 0.6rem; }
-  & .quote dl > div + div::before { content: '│'; margin: 0 0.9rem; color: var(--line2); }
   & .quote dt { font-size: 1rem; color: var(--faint); letter-spacing: 0; }
   & .quote dd { margin: 0; font-size: 1.15rem; color: var(--fg); }
   & .spark { background: radial-gradient(circle, var(--line2) 1px, transparent 1.5px) 0 0 / 2rem 2rem; }
+  & .candles { height: auto; min-height: 8rem; }
+  & .candles text { font: 1.3px var(--mono); text-anchor: middle; fill: var(--faint); text-shadow: none; }
+  & .candles .win { fill: var(--win); }
+  & .candles .loss { fill: var(--loss); }
+  & .candles .vol { fill: var(--amber); opacity: 0.55; }
+  & .candles .cross::after { display: none; }
   & .spark .line { stroke: var(--sys); opacity: 1; filter: drop-shadow(0 0 4px var(--sys)); }
   & .spark stop { stop-color: var(--sys); }
   & :is(.tip, .cross::after) { border-radius: 0; color: var(--sys); background: var(--sys); }

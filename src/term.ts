@@ -41,3 +41,38 @@ export const spark = (v: number[]) => {
 
 // "Rebuy King" → "rebuy_king"
 export const snake = (s: string) => s.trim().toLowerCase().replace(/[\s-]+/g, '_')
+
+// OHLC of a step series (`pts` = [t, value after], sorted) in `n` buckets of `w` ms from t0. v = money that came in.
+export type Candle = { o: number; h: number; l: number; c: number; v: number }
+export function candles(pts: [number, number][], t0: number, w: number, n: number): Candle[] {
+  let i = 0, cur = 0
+  return Array.from({ length: n }, (_, k) => {
+    const c = { o: cur, h: cur, l: cur, c: cur, v: 0 }
+    for (; i < pts.length && pts[i][0] < t0 + (k + 1) * w; i++) {
+      c.v += Math.max(0, pts[i][1] - cur)
+      cur = pts[i][1]
+      c.h = Math.max(c.h, cur)
+      c.l = Math.min(c.l, cur)
+    }
+    c.c = cur
+    return c
+  })
+}
+
+// Candles as text rows (top first), one char per candle at half-row resolution: body █▀▄, wick │╵╷, flat ─.
+export function candleRows(cs: Candle[], rows: number, hi: number): string[] {
+  const y = (v: number) => Math.round((v / (hi || 1)) * (rows * 2 - 1))
+  return Array.from({ length: rows }, (_, i) => {
+    const r = rows - 1 - i
+    return cs
+      .map(c => {
+        const [b0, b1, w0, w1] = [y(Math.min(c.o, c.c)), y(Math.max(c.o, c.c)), y(c.l), y(c.h)]
+        const lo = (a: number, b: number) => a <= 2 * r && 2 * r <= b, up = (a: number, b: number) => a <= 2 * r + 1 && 2 * r + 1 <= b
+        if (c.h === c.l) return y(c.c) >> 1 === r ? '─' : ' '
+        if (lo(b0, b1) || up(b0, b1)) return lo(b0, b1) && up(b0, b1) ? '█' : up(b0, b1) ? '▀' : '▄'
+        if (lo(w0, w1) || up(w0, w1)) return lo(w0, w1) && up(w0, w1) ? '│' : up(w0, w1) ? '╵' : '╷'
+        return ' '
+      })
+      .join('')
+  })
+}

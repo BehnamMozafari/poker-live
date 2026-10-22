@@ -1,5 +1,5 @@
 // Everything is synthesized with Web Audio: generated lo-fi jazz + chip SFX, no files, works offline.
-let ctx: AudioContext | undefined, master: GainNode, music: GainNode, fx: GainNode, keys: GainNode, low: BiquadFilterNode, noise: AudioBuffer
+let ctx: AudioContext | undefined, master: GainNode, music: GainNode, fx: GainNode, keys: GainNode, low: BiquadFilterNode, pads: BiquadFilterNode, noise: AudioBuffer
 let vol = 0.6, timer = 0
 const MUSIC = 0.5
 
@@ -20,12 +20,12 @@ function init() {
   lfo.frequency.value = 4.2
   lfo.connect(gain(0.18, keys.gain))
   lfo.start()
-  // vinyl hiss under everything
-  const hiss = ctx.createBufferSource()
-  hiss.buffer = noise
-  hiss.loop = true
-  hiss.connect(filter('bandpass', 3000, 0.4)).connect(gain(0.012, music))
-  hiss.start()
+  // synth pads: a resonant lowpass that slowly opens and closes
+  ;(pads = filter('lowpass', 900, 3)).connect(music)
+  const sweep = ctx.createOscillator()
+  sweep.frequency.value = 0.05
+  sweep.connect(gain(500, pads.frequency))
+  sweep.start()
   return ctx
 }
 
@@ -168,10 +168,64 @@ function play(s: number, t: number) {
   }
 }
 
+// ── Terminal soundtrack: late-night synth. Straight 8ths at 92, minor keys, two bars a chord, every 16 bars a new
+// progression, key and texture. Detuned saw pads, a pumping sub on the offbeats, an echoing arp, keyboard backbeat.
+const SBPM = 92
+const SYNTH: [number, 0 | 1][][] = [ // [degree, minor?]
+  [[0, 1], [8, 0], [3, 0], [10, 0]],
+  [[0, 1], [5, 1], [8, 0], [7, 0]],
+  [[0, 1], [10, 0], [8, 0], [10, 0]],
+  [[0, 1], [3, 0], [10, 0], [5, 1]],
+  [[8, 0], [10, 0], [0, 1], [0, 1]],
+]
+let sKey = 9, sProg = SYNTH[0], arp = false, kit = 1, ghosts = 0.1
+
+function pad(m: number, t: number, len: number) {
+  for (const d of [-8, 8]) {
+    const o = ctx!.createOscillator(), g = ctx!.createGain()
+    o.type = 'sawtooth'
+    o.frequency.value = hz(m)
+    o.detune.value = d
+    g.gain.setValueAtTime(0, t)
+    g.gain.linearRampToValueAtTime(0.016, t + len * 0.3)
+    g.gain.setTargetAtTime(0, t + len * 0.85, len * 0.12)
+    o.connect(g).connect(pads)
+    o.start(t)
+    o.stop(t + len * 1.6)
+  }
+}
+
+function synth(s: number, t: number) {
+  const pos = s % 8, b = s >> 3, beat = 60 / SBPM
+  if (pos === 0 && b % 16 === 0) {
+    sProg = rnd(SYNTH)
+    if (b && Math.random() < 0.5) sKey = (sKey + rnd([3, 5, 7, 9])) % 12
+    arp = b > 0 && Math.random() < 0.65
+    kit = b ? rnd([1, 2, 2]) : 1
+    ghosts = Math.random() * 0.3
+  }
+  const [deg, minor] = sProg[(b >> 1) % 4], root = (sKey + deg) % 12, chord = minor ? [0, 3, 7, 10, 14] : [0, 4, 7, 11, 14]
+  if (pos === 0 && b % 2 === 0) chord.slice(0, 4).forEach(v => pad(48 + ((root + v) % 12) + (v > 11 ? 12 : 0), t, beat * 8))
+  // sub: quiet under the kick, swelling on the offbeat (the pump)
+  tone('triangle', hz(36 + root), t, pos % 2 ? 0.34 : 0.12, 0.1, low, beat * 0.45)
+  if (pos === 0 || (kit > 1 && pos === 3 && Math.random() < 0.4)) kick(t, 0.5)
+  if (pos === 4) keystroke(t, 0.7, true, music), burst(t, 0.05, 0.09, ['bandpass', 1600, 0.7]) // keyboard backbeat
+  if (kit > 1 && pos % 2) burst(t, 0.025, 0.03, ['bandpass', 6000, 0.8]) // soft shaker
+  for (const h of [0, 0.5]) if (Math.random() < ghosts) keystroke(t + h * beat * 0.5, 0.12 + Math.random() * 0.1, false, music)
+  if (arp)
+    for (const h of [0, 1]) {
+      const m = 72 + root + chord[(s * 2 + h) % 5] - 12 * (((s * 2 + h) >> 2) % 2), at = t + (h * beat) / 4
+      tone('triangle', hz(m), at, 0.028, 0.1, keys)
+      tone('triangle', hz(m), at + beat * 0.75, 0.011, 0.1, keys) // dotted-8th echo
+    }
+  if (Math.random() < 0.06) bell(72 + root + rnd(chord), t)
+}
+
 function tick() {
   while (nextT < ctx!.currentTime + 0.25) {
-    play(step, nextT)
-    nextT += (60 / bpm) * (step++ % 2 ? 1 - swing : swing)
+    const s = step++
+    if (skin === 'terminal') synth(s, nextT), (nextT += 30 / SBPM)
+    else play(s, nextT), (nextT += (60 / bpm) * (s % 2 ? 1 - swing : swing))
   }
 }
 
@@ -234,43 +288,53 @@ const sounds = {
     sounds.crash()
   },
   type(n: number) {
-    keystrokes(ctx!.currentTime, n)
+    typing(ctx!.currentTime, n, 0.05)
   },
 }
 
-// Terminal theme: bleeps, a modem chirp, a klaxon, and keystrokes timed to the toast typing out (30ms a character).
-function keystrokes(t: number, n: number) {
-  for (let i = 0; i < n; i++) burst(t + i * 0.03 + Math.random() * 0.01, 0.05 + Math.random() * 0.05, 0.006, ['highpass', 2500 + Math.random() * 2500], fx)
+// Terminal theme: a mechanical keyboard. Every event is someone typing the command and hitting enter.
+// A key = a low thock (pitch-dropping sine + muffled noise) and a soft click; `big` (space/enter) is deeper, with a stabilizer rattle.
+function keystroke(t: number, v = 0.5, big = false, out: AudioNode = fx) {
+  const f = (big ? 90 : 160) + Math.random() * 60
+  tone('sine', f, t, v * 0.5, big ? 0.03 : 0.016, out).frequency.exponentialRampToValueAtTime(f * 0.6, t + 0.05)
+  burst(t, v * 0.4, big ? 0.018 : 0.009, ['lowpass', big ? 900 : 1400 + Math.random() * 600], out)
+  burst(t + 0.003, v * 0.06, 0.004, ['bandpass', 3000, 1.2], out)
+  if (big) burst(t + 0.035, v * 0.07, 0.008, ['bandpass', 1300, 2], out)
 }
-const bleeps = (t: number, fs: number[], gap = 0.08) => fs.forEach((f, i) => tone('square', f, t + i * gap, 0.05, 0.05, fx))
+// Human typing: 70% to 140% of `gap` between keys, a space every few, the odd hesitation. Returns when the next key would land.
+function typing(t: number, n: number, gap = 0.08, v = 0.45) {
+  for (let i = 0; i < n; i++) {
+    keystroke(t, v * (0.75 + Math.random() * 0.5), i % 5 === 4 && Math.random() < 0.6)
+    t += gap * (0.7 + Math.random() * 0.7) + (Math.random() < 0.08 ? 0.12 : 0)
+  }
+  return t
+}
 const term: Partial<typeof sounds> = {
   buyin(rebuy: boolean) {
-    const t = duck(1.8)
-    keystrokes(t, 28)
-    bleeps(t + 0.95, rebuy ? [880, 1175, 1568] : [880, 1318])
+    const t = typing(duck(1.8), rebuy ? 12 : 9, 0.07)
+    keystroke(t + 0.06, 0.9, true)
   },
   cashout() {
-    const t = duck(2.2)
-    keystrokes(t, 28)
-    bleeps(t + 0.95, [1650, 1850, 2100, 1200, 2400, 1800], 0.05)
-    burst(t + 1.3, 0.12, 0.12, ['bandpass', 1800, 2], fx) // modem hiss
+    const t = typing(duck(2), 13, 0.065)
+    keystroke(t + 0.1, 1, true)
+    keystroke(t + 0.32, 0.5, true) // and a second, satisfied enter
   },
   drumroll(len: number) {
     const t = duck(len + 2)
-    for (let d = 0; d < len; d += 0.06) tone('square', 220 + (660 * d) / len, t + d, 0.02 + (0.04 * d) / len, 0.015, fx)
+    for (let d = 0; d < len; d += 0.12 - (0.085 * d) / len) keystroke(t + d, 0.2 + (0.4 * d) / len, Math.random() < 0.1)
   },
   crash() {
     const t = duck(2)
-    bleeps(t, [523, 659, 784, 1047, 1568], 0.06)
-    burst(t + 0.3, 0.2, 0.4, ['highpass', 4000], fx)
+    keystroke(t, 1.3, true)
+    keystroke(t + 0.18, 0.5)
+    keystroke(t + 0.26, 0.4)
   },
   alarm() {
-    const t = duck(2.5)
-    for (let i = 0; i < 6; i++) tone('sawtooth', i % 2 ? 660 : 880, t + i * 0.22, 0.07, 0.2, fx, 0.2)
+    const t = typing(duck(2.8), 24, 0.04, 0.6)
+    for (let i = 0; i < 3; i++) keystroke(t + 0.15 + i * 0.22, 1, true)
   },
   tick() {
-    keystrokes(ctx!.currentTime, 1)
-    tone('sine', 120, ctx!.currentTime, 0.2, 0.03, fx)
+    keystroke(ctx!.currentTime, 0.6)
   },
 }
 let skin = 'quote'
