@@ -4,7 +4,8 @@ export type { Payment }
 export type Player = { id: string; name: string; color: string }
 export type Event = { t: number; type: 'buyin' | 'cashout' | 'adjust'; player: string; cents: number }
 export type Session = { id: string; name: string; startedAt: number; endedAt?: number; defaultBuyIn: number; banker?: boolean; host?: string; events: Event[] }
-export type Settings = { defaultBuyIn: number; buyIns: number[]; denoms: Record<string, number>; volume: number; music: boolean }
+export type Timer = { mean: number; stdev: number; min: number } // minutes
+export type Settings = { defaultBuyIn: number; buyIns: number[]; denoms: Record<string, number>; volume: number; music: boolean; timer: Timer }
 export type Data = { players: Player[]; sessions: Session[]; settings: Settings }
 
 // Chip colours double as player colours: face, edge spots, ink (readable on the dark background for text/lines).
@@ -24,6 +25,7 @@ export const DEFAULTS: Settings = {
   denoms: { white: 100, red: 500, blue: 1000, green: 2500, black: 10000 },
   volume: 0.6,
   music: true,
+  timer: { mean: 20, stdev: 5, min: 10 },
 }
 
 const KEY = 'poker-live'
