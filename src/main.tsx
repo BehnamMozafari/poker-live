@@ -1,14 +1,20 @@
 import { StrictMode, useEffect, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
-import { load, save, live, ended, lines, facts, leaderboard, profitSeries, payments, usd, roll, type Data, type Event, type Mut, type Who } from './data.ts'
+import { load, save, parse, live, ended, lines, facts, leaderboard, profitSeries, payments, usd, roll, type Data, type Event, type Mut, type Who } from './data.ts'
 import { unlock, setMusic, setVolume, sfx } from './audio.ts'
 import { vars, ChipDefs, Header, LiveBoard, Leaders, Facts, Ticker, Toast, Final, Home, Ambient } from './Board.tsx'
 import { PlayerSheet, AddSheet, NewNight, LogSheet, SettleSheet, HistorySheet, SettingsSheet, SeatsSheet, EquitySheet } from './Sheets.tsx'
 import './index.css'
 import history from '../history.json?raw'
 
-// A browser with nothing saved (e.g. the Pages site) starts from the committed history.
-if (!localStorage.getItem('poker-live')) localStorage.setItem('poker-live', history)
+// The committed history seeds every browser: nights and players it has that this one doesn't are added, nothing saved is overwritten.
+// ponytail: a committed night deleted locally comes back on reload; track deleted ids if that bites.
+try {
+  const d = parse(localStorage.getItem('poker-live') ?? history), h = parse(history), has = (xs: { id: string }[], x: { id: string }) => xs.some(y => y.id === x.id)
+  d.players.push(...h.players.filter(p => !has(d.players, p)))
+  d.sessions.push(...h.sessions.filter(s => !has(d.sessions, s)))
+  localStorage.setItem('poker-live', JSON.stringify(d))
+} catch {}
 
 type SheetKind = 'add' | 'new' | 'log' | 'settle' | 'history' | 'settings' | 'seats' | 'odds'
 type Open = { kind: 'player'; id: string; back?: SheetKind } | { kind: SheetKind; q?: string } | null
