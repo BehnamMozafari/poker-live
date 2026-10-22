@@ -182,7 +182,7 @@ export function AddSheet({ data, mut, onClose, onPick, q: q0 = '' }: P & { onPic
           <div className="pills">
             {hits.map(p => (
               <button key={p.id} className={`pill${played.has(p.id) ? ' on' : ''}`} onClick={() => pick(p.id)}>
-                <Avatar p={p} />
+                <Avatar p={p} dense />
                 {p.name}
               </button>
             ))}
@@ -237,7 +237,7 @@ export function NewNight({ data, mut, onClose }: P) {
         <div className="pills">
           {data.players.map(p => (
             <button key={p.id} className={`pill ${pick.has(p.id) ? 'on' : 'off'}`} onClick={() => toggle(p.id)}>
-              <Avatar p={p} />
+              <Avatar p={p} dense />
               {p.name}
             </button>
           ))}
@@ -262,7 +262,7 @@ export function LogSheet({ data, mut, who, onClose }: P) {
             .map((e, i) => (
               <li key={`${e.t}-${i}`}>
                 <time className="num">{clock(e.t)}</time>
-                <Avatar p={who(e.player)} />
+                <Avatar p={who(e.player)} dense />
                 <b>{who(e.player).name}</b>
                 <span className="dim">{LABEL[e.type]}</span>
                 <b className="num">{usd(e.cents, e.type === 'adjust')}</b>
@@ -298,7 +298,7 @@ function Results({ s, who }: { s: Session; who: Who }) {
             <tr key={l.id}>
               <td>
                 <span className="p">
-                  <Avatar p={who(l.id)} />
+                  <Avatar p={who(l.id)} dense />
                   {who(l.id).name}
                   {l.seated && <em className="tagx">at table</em>}
                 </span>
@@ -321,12 +321,12 @@ function PayList({ s, who }: { s: Session; who: Who }) {
       {pays.map((p, i) => (
         <li key={i}>
           <span className="p">
-            <Avatar p={who(p.from)} />
+            <Avatar p={who(p.from)} dense />
             {who(p.from).name}
           </span>
           <span className="dim">→</span>
           <span className="p">
-            <Avatar p={who(p.to)} />
+            <Avatar p={who(p.to)} dense />
             {who(p.to).name}
           </span>
           <b className="num">{usd(p.cents)}</b>
@@ -360,7 +360,7 @@ export function SettleSheet({ data, mut, who, onClose, onPick, onReveal }: P & {
           <div className="pills">
             {seated.map(l => (
               <button key={l.id} className="pill" onClick={() => onPick(l.id)}>
-                <Avatar p={who(l.id)} />
+                <Avatar p={who(l.id)} dense />
                 {who(l.id).name}
                 <span className="hi">Cash out →</span>
               </button>
@@ -476,7 +476,7 @@ export function HistorySheet({ data, mut, who, onClose }: P) {
                 <tr key={r.id}>
                   <td>
                     <span className="p">
-                      <Avatar p={who(r.id)} />
+                      <Avatar p={who(r.id)} dense />
                       {who(r.id).name}
                     </span>
                   </td>
@@ -539,6 +539,15 @@ export function SettingsSheet({ data, mut, onClose }: P) {
   const set = (fn: (s: Settings) => void) => mut(d => fn(d.settings))
   return (
     <Sheet title="Settings" wide onClose={onClose}>
+      <h3>Theme</h3>
+      <Seg<Settings['theme']>
+        options={[
+          ['quote', 'Quote'],
+          ['terminal', 'Terminal'],
+        ]}
+        value={s.theme}
+        onChange={v => set(s => void (s.theme = v))}
+      />
       <h3>Money</h3>
       <div className="grid2">
         <label className="field">
@@ -567,7 +576,7 @@ export function SettingsSheet({ data, mut, onClose }: P) {
       <ul className="roster">
         {data.players.map((p, i) => (
           <li key={p.id}>
-            <Avatar p={p} />
+            <Avatar p={p} dense />
             <input value={p.name} maxLength={16} aria-label="Name" onChange={e => mut(d => void (d.players[i].name = e.target.value))} />
             <Swatches value={p.color} onChange={c => mut(d => void (d.players[i].color = c))} />
             <button className="x" disabled={used.has(p.id)} title={used.has(p.id) ? 'Has played, kept for history' : 'Delete'} aria-label="Delete" onClick={() => mut(d => void d.players.splice(i, 1))}>

@@ -1,0 +1,195 @@
+/* Terminal theme: true black (AMOLED), phosphor green system colour, Bloomberg amber labels, SF Mono everywhere.
+   Everything is scoped under [data-theme='terminal'] so Quote (index.css) stays untouched. Keyframes are t-prefixed. */
+[data-theme='terminal'] {
+  --bg: #000;
+  --fg: #d8ffe6;
+  --dim: rgb(216 255 230 / 0.6);
+  --faint: rgb(216 255 230 / 0.36);
+  --line: rgb(57 255 136 / 0.12);
+  --line2: rgb(57 255 136 / 0.26);
+  --panel: rgb(57 255 136 / 0.03);
+  --win: #39ff88;
+  --loss: #ff4f6d;
+  --amber: #ffb000;
+  --live: #39ff88;
+  --sys: #39ff88;
+  --sans: 'SF Mono', ui-monospace, Menlo, monospace;
+
+  & body { letter-spacing: 0; text-shadow: 0 0 0.45rem color-mix(in srgb, currentColor 30%, transparent); }
+  & *:not(input, textarea) { text-transform: lowercase !important; }
+  & :is(.up, .card) { text-transform: uppercase !important; }
+  & :is(.who b, .money b, .price, h1, h2, .toast b, .fact b, .fact .big, .res, .pay, .pay > b, .pay-who, .bar, .ticker, .tb, .btn) { letter-spacing: 0; }
+  & :is(small, .sheet h3, .tbl th, .th span, .quote dt) { color: var(--amber); letter-spacing: 0.06em; }
+  & :focus-visible, & .row:focus-visible { outline-color: var(--sys); }
+  & :is(.check input[type='checkbox'], input[type='range']) { accent-color: var(--sys); }
+
+  /* ── screen: scanlines + vignette over everything, square cursor ── */
+  & .app::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: 8;
+    pointer-events: none;
+    background: repeating-linear-gradient(180deg, rgb(0 0 0 / 0.2) 0 1px, transparent 1px 3px), radial-gradient(130% 100% at 50% 45%, transparent 55%, rgb(0 0 0 / 0.7));
+  }
+  & .ring { border-radius: 0; border-color: rgb(57 255 136 / 0.6); }
+  & .ring.hot { background-color: rgb(57 255 136 / 0.06); border-color: rgb(57 255 136 / 0.3); }
+  & .glow { background-image: radial-gradient(circle 26rem at var(--x, 50%) var(--y, 50%), rgb(57 255 136 / calc(var(--g) * 0.05)), transparent 70%); }
+  & .alarm .stage { animation: drift 900s ease-in-out infinite alternate, t-glitch 0.3s steps(2) 4; }
+  & .caret { margin-left: 0.3em; font-style: normal; color: var(--sys); animation: t-blink 1.06s steps(1) infinite; }
+  & .type { display: inline-block; max-width: 0; overflow: hidden; white-space: pre; vertical-align: bottom; animation: t-type calc(var(--n) * 30ms) steps(var(--n)) both; }
+
+  /* ── ambience: black, faint green dots, ASCII light under the cursor, terminal bits ── */
+  & .ambient { background: var(--bg); }
+  & .ambient::after, & .aurora, & .spot { display: none; }
+  & .grid { background: radial-gradient(circle, rgb(57 255 136 / 0.09) 1px, transparent 1.6px) 0 0 / 1.8rem 1.8rem; }
+  & .chargrid { position: absolute; inset: 0; width: 100%; height: 100%; transition: opacity 1.2s; }
+  & .sleep .chargrid { opacity: 0; }
+  & .fan { stroke-width: 0.08; }
+  & .fan .win { stroke: var(--win); }
+  & .fan .loss { stroke: var(--loss); }
+  & .ping { border-radius: 0; border-color: rgb(57 255 136 / 0.35); }
+  & .streak { background: linear-gradient(90deg, transparent, rgb(57 255 136 / 0.35), transparent); }
+  & :is(.tail, .book) { margin: 0; font: 500 0.85rem/1.5 var(--mono); color: var(--sys); white-space: pre; opacity: 0; animation: t-bit 14s ease-in-out forwards; }
+  & :is(.tail, .book) span { display: block; }
+  & .book span { animation: t-flicker 0.9s steps(2) infinite; }
+  & .book span:nth-child(odd) { animation-duration: 1.3s; animation-delay: -0.4s; }
+  & .book span:nth-child(3n) { animation-duration: 0.7s; }
+
+  /* ── header: shell prompt + htop-style quote pane ── */
+  & .bar { font-size: 1rem; text-transform: none; }
+  & .prompt { margin-right: auto; color: var(--fg); }
+  & .prompt b { font-weight: 600; color: var(--sys); }
+  & .prompt em { font-style: normal; color: #5fb4ff; }
+  & .live i { border-radius: 0; }
+  & .quote { position: relative; padding: 1.3rem 1.6rem 1rem; border: 1px solid var(--line2); }
+  & :is(.quote, .panel)::before { content: '─ ' attr(data-title) ' ─'; position: absolute; z-index: 1; top: 0; left: 1.2rem; translate: 0 -55%; padding: 0 0.4rem; background: var(--bg); font: 500 0.85rem var(--mono); color: var(--amber); }
+  & .quote::before { content: '─ quote ─'; }
+  & .price { margin: 0.2rem 0 0.7rem; font-size: 4.6rem; font-weight: 500; background: none; color: var(--sys); text-shadow: 0 0 1.2rem rgb(57 255 136 / 0.45); }
+  & .quote dl { gap: 0; }
+  & .quote dl > div { display: flex; align-items: baseline; gap: 0.6rem; }
+  & .quote dl > div + div::before { content: '│'; margin: 0 0.9rem; color: var(--line2); }
+  & .quote dt { font-size: 1rem; color: var(--faint); letter-spacing: 0; }
+  & .quote dd { margin: 0; font-size: 1.15rem; color: var(--fg); }
+  & .spark { background: radial-gradient(circle, var(--line2) 1px, transparent 1.5px) 0 0 / 2rem 2rem; }
+  & .spark .line { stroke: var(--sys); opacity: 1; filter: drop-shadow(0 0 4px var(--sys)); }
+  & .spark stop { stop-color: var(--sys); }
+  & :is(.tip, .cross::after) { border-radius: 0; color: var(--sys); background: var(--sys); }
+  & .cross > span { color: var(--sys); }
+
+  /* ── panes ── */
+  & .panel { border: 1px solid var(--line2); padding: 1.4rem 1.6rem 1rem; }
+  & .title h1 { font-size: 2.2rem; }
+  & .title h1::before { content: '$ cat '; color: var(--sys); }
+  & .empty { font-size: 1.2rem; }
+
+  /* ── live board ── */
+  & .row::before { width: 0.35rem; border-radius: 0; box-shadow: none; }
+  & .row.flash::after { background: var(--c); mix-blend-mode: difference; animation: t-rv 1.8s steps(1) forwards; }
+  & .row.flash .row-in { animation: t-glitch 0.32s steps(2) 2; }
+  & .who b { font-size: 30cqh; }
+  & .money b { font-size: 36cqh; font-weight: 500; }
+  & .rebuys { font-size: 24cqh; }
+  & .blocks { display: flex; align-items: center; align-self: center; height: auto; margin: 0; font-size: 34cqh; line-height: 1; white-space: nowrap; text-shadow: 0 0 0.6rem currentColor; }
+  & .blocks i { margin-right: 0.15em; font-style: normal; }
+  & .blocks i:nth-child(5n) { margin-right: 0.6em; }
+  & .blocks i.new { animation: t-blink 0.25s steps(1) 3 reverse; }
+  & .blocks em { font-style: normal; font-size: 0.7em; color: var(--dim); }
+  & .tag-id { font: 600 0.9em var(--mono); white-space: nowrap; }
+
+  /* ── leaderboard, facts ── */
+  & .lb-row:not(.th)::before { width: 0.3rem; }
+  & .trend-txt { overflow: hidden; font: 500 1.4rem/1 var(--mono); letter-spacing: 0.04em; white-space: nowrap; }
+  & .fact { background: transparent; border-style: dashed; border-radius: 0; }
+  & .fact .big { font-weight: 500; color: var(--sys); }
+
+  /* ── status line (dim, it sits there for hours on an OLED) + vim-style dock ── */
+  & .ticker { align-self: center; height: 2.2rem; gap: 0; border-top: none; background: rgb(57 255 136 / 0.1); font-size: 0.95rem; text-transform: none; color: var(--dim); }
+  & .ticker .tag { height: 100%; padding: 0 1rem; background: rgb(57 255 136 / 0.22); font-weight: 700; color: var(--sys); }
+  & .ticker .tab { padding: 0 0.8rem; white-space: nowrap; }
+  & .ticker .tab.on { color: var(--sys); }
+  & .track span::after { content: '│'; color: var(--line2); }
+  & .toolbar { padding: 0.3rem 0.6rem; background: rgb(0 0 0 / 0.88); border-color: var(--line2); border-radius: 0; backdrop-filter: none; }
+  & .toolbar::before { content: ':'; margin-right: 0.4rem; font-weight: 700; color: var(--sys); }
+  & .tb { padding: 0.45rem 0.5rem; border-radius: 0; font-size: 0.95rem; }
+  & .tb i { display: none; }
+  & .tb::before { content: '['; color: var(--faint); }
+  & .tb::after { content: ']'; color: var(--faint); }
+  & .tb:hover:not(:disabled) { color: var(--sys); background-color: rgb(57 255 136 / 0.12); }
+  & :is(.tb, .btn, .seg button).primary, & .seg .on { background-color: var(--sys); color: #000; text-shadow: none; }
+  & :is(.tb, .btn).primary::before, & :is(.tb, .btn).primary::after { color: rgb(0 0 0 / 0.5); }
+
+  /* ── stdout toast ── */
+  & .toast { min-width: 40rem; background: rgb(0 0 0 / 0.92); border-color: var(--line2); border-radius: 0; box-shadow: 0 0 2.5rem rgb(57 255 136 / 0.08); backdrop-filter: none; }
+  & .toast::before { display: none; }
+  & .toast::after { border-radius: 0; box-shadow: none; }
+  & .toast div small::before { border-radius: 0 !important; }
+  & .toast .avatar { width: 4rem; height: 4rem; }
+  & .tty .cmd { display: block; margin: 0.5rem 0 0.4rem; font-size: 1.5rem; color: var(--fg); }
+  & .tty .st { display: block; font-size: 1.4rem; animation: t-show 0.01s both, t-glitch 0.32s steps(2) 2; animation-delay: calc(var(--n) * 30ms + 0.1s); }
+  & .tty .st.win { color: var(--win); }
+  & .tty .st.loss { color: var(--loss); }
+  & .toast.tty b { font-size: 2.2rem; color: var(--amber); }
+
+  /* ── end of night ── */
+  & :is(.res.champ, .res:not(.on)::after) { border-radius: 0; }
+  & .compile { margin: 0; font: 500 1.3rem var(--mono); color: var(--sys); }
+  & .figlet { margin: 0.3rem 0 0; font-family: var(--mono); line-height: 1; letter-spacing: 0; white-space: pre; color: var(--c, var(--sys)); text-shadow: 0 0 0.8rem currentColor; }
+  & .pay { padding-block: 0.15em; }
+  & .pays-word { font-size: 1em; letter-spacing: 0; color: var(--faint); }
+  & .pay-who:first-child::before { content: '-'; color: var(--loss); }
+  & .pay-who:nth-child(3)::before { content: '+'; color: var(--win); }
+  & .rain { position: fixed; inset: 0; z-index: 4; width: 100%; height: 100%; pointer-events: none; opacity: 0.6; }
+
+  /* ── home + boot ── */
+  & .home.tty { align-items: flex-start; gap: 1.6rem; padding-left: 6rem; text-align: left; }
+  & .boot { font: 500 1.1rem/1.6 var(--mono); color: var(--dim); }
+  & .boot .type { display: block; margin: 0; font: inherit; letter-spacing: 0; color: inherit; }
+  & :is(.home, .boot-over) .figlet { animation: t-show 0.01s 1.9s both; }
+  & .home.tty > p { display: flex; align-items: center; gap: 1rem; margin: 0; font: 500 1.1rem var(--mono); letter-spacing: 0; color: var(--dim); animation: t-show 0.01s 2.1s both; }
+  & .boot-over { position: fixed; inset: 0; z-index: 30; display: flex; flex-direction: column; justify-content: center; gap: 1.6rem; padding-left: 8rem; background: #000; }
+
+  /* ── sheets as windows ── */
+  & .sheet { background: rgb(0 0 0 / 0.95); border-color: var(--sys); border-radius: 0; box-shadow: 0 0 4rem rgb(57 255 136 / 0.1); backdrop-filter: none; }
+  & .sheet::backdrop { background: rgb(0 0 0 / 0.7); backdrop-filter: none; }
+  & .sheet header { margin: -1.5rem -2rem 1rem; padding: 0.5rem 1rem 0.5rem 1.2rem; background: rgb(57 255 136 / 0.06); border-bottom: 1px solid var(--line2); }
+  & .sheet h2 { font-size: 1.25rem; color: var(--amber); }
+  & .sheet h2::before { content: '┌─'; color: var(--sys); }
+  & .sheet h3::before { content: '# '; color: var(--sys); }
+  & .x { display: inline-flex; width: auto; padding: 0 0.4rem; border-radius: 0; }
+  & .x::before { content: '['; }
+  & .x::after { content: ']'; }
+  & .x:hover:not(:disabled) { rotate: none; color: var(--sys); }
+  & .btn { background-color: transparent; border-radius: 0; }
+  & .btn::before { content: '[\00a0'; color: var(--faint); }
+  & .btn::after { content: '\00a0]'; color: var(--faint); }
+  & .btn:hover { background-color: rgb(57 255 136 / 0.1); border-color: var(--sys); }
+  & .btn.primary { box-shadow: 0 0 1.5rem rgb(57 255 136 / 0.25); }
+  & .btn.primary:hover { background-color: #7dffb0; }
+  & :is(input:not([type]), input[inputmode], select) { background: #000; border-radius: 0; caret-color: var(--sys); caret-shape: block; }
+  & :is(input, select):focus { border-color: var(--sys); box-shadow: 0 0 0 1px var(--sys); }
+  & :is(.seg, .seg button, .pill, .warn, .slot, .card, .chipbtn) { border-radius: 0; }
+  & .pill.on, & .slot.on { border-color: var(--sys); background-color: rgb(57 255 136 / 0.1); }
+  & .dot { border-radius: 0.2rem; }
+  & .chipbtn { width: auto; height: auto; padding: 0.9rem 1.4rem; background: #000; border: 1px solid var(--face); box-shadow: inset 0 -0.3rem 0 var(--face); }
+  & .chipbtn:hover { translate: none; rotate: none; background: color-mix(in srgb, var(--face) 22%, #000); box-shadow: inset 0 -0.3rem 0 var(--face); }
+  & .chipbtn.def { outline-color: var(--sys); }
+  & .oval { background: none; border: 1px dashed var(--sys); }
+  & .seat .avatar { border-radius: 0; }
+  & .dealer { width: auto; padding: 0 0.15rem; border-radius: 0; background: var(--amber); text-shadow: none; }
+  & .dealer::before { content: '['; }
+  & .dealer::after { content: ']'; }
+  & .eqbar { border-radius: 0; mask: repeating-linear-gradient(90deg, #000 0 0.8rem, transparent 0 1rem); }
+}
+
+@keyframes t-blink { 50% { opacity: 0; } }
+@keyframes t-show { from { opacity: 0; } to { opacity: 1; } }
+@keyframes t-type { to { max-width: calc(var(--n) * 1ch); } }
+@keyframes t-bit { 10%, 70% { opacity: 0.22; } }
+@keyframes t-flicker { 50% { opacity: 0.45; } }
+/* reverse video: on, off, on, gone */
+@keyframes t-rv { 0% { opacity: 1; } 15% { opacity: 0; } 25% { opacity: 1; } 70%, 100% { opacity: 0; } }
+@keyframes t-glitch {
+  0% { translate: 0.15rem 0; text-shadow: -0.15rem 0 #ff2bd6, 0.15rem 0 #00f0ff; }
+  50% { translate: -0.15rem 0; text-shadow: 0.15rem 0 #ff2bd6, -0.15rem 0 #00f0ff; }
+}

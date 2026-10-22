@@ -6,6 +6,7 @@ A tracker for home cash games that runs on the TV in the background while we pla
 - **Setup: laptop mirrored to the TV.** One window that everyone sees. No backend, and it works offline. Run with `npm start` (Vite on fixed port 5199; localStorage belongs to that origin, so the port must not change).
 - **Format: cash games only.** Buy-ins, rebuys, cash-outs, settle-up and history. No tournament clock in v1.
 - **Look: quiet dark, a little finance** (revised 2026-10-21, felt dropped): near-black with drifting aurora and grain, hairline tables, SF Pro + SF Mono labels (macOS system fonts), white primary buttons, colour only for players and green/red P&L. The night reads like a stock quote.
+- **Themes** (added 2026-10-22): Settings picks Quote (the look above, default) or Terminal (AMOLED tmux/CRT skin for the SWE/quant crowd). Full design: `docs/terminal-theme.md`.
 - **Chips:** each player owns a chip colour; their stack, avatar, row accent and chart line all use it.
 - **Money:** $50 default buy-in; rebuy buttons $25/$50/$100 + custom (editable). Cash-out by chip counter per colour or by typing $.
 - **Sound:** generated lo-fi jazz (Web Audio, no files) + chip/cash-out/drumroll SFX, music ducks under SFX. Every 8 bars a section rolls its own feel: key, tempo drift, swing, density, two-feel bass, lead voice (vibes/bell/Rhodes), plus tritone subs and stop-time breaks.

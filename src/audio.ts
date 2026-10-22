@@ -230,6 +230,51 @@ const sounds = {
     tone('sine', 140, ctx!.currentTime, 0.4, 0.06, fx)
     clink(ctx!.currentTime, 0.08)
   },
+  alarm() {
+    sounds.crash()
+  },
+  type(n: number) {
+    keystrokes(ctx!.currentTime, n)
+  },
 }
+
+// Terminal theme: bleeps, a modem chirp, a klaxon, and keystrokes timed to the toast typing out (30ms a character).
+function keystrokes(t: number, n: number) {
+  for (let i = 0; i < n; i++) burst(t + i * 0.03 + Math.random() * 0.01, 0.05 + Math.random() * 0.05, 0.006, ['highpass', 2500 + Math.random() * 2500], fx)
+}
+const bleeps = (t: number, fs: number[], gap = 0.08) => fs.forEach((f, i) => tone('square', f, t + i * gap, 0.05, 0.05, fx))
+const term: Partial<typeof sounds> = {
+  buyin(rebuy: boolean) {
+    const t = duck(1.8)
+    keystrokes(t, 28)
+    bleeps(t + 0.95, rebuy ? [880, 1175, 1568] : [880, 1318])
+  },
+  cashout() {
+    const t = duck(2.2)
+    keystrokes(t, 28)
+    bleeps(t + 0.95, [1650, 1850, 2100, 1200, 2400, 1800], 0.05)
+    burst(t + 1.3, 0.12, 0.12, ['bandpass', 1800, 2], fx) // modem hiss
+  },
+  drumroll(len: number) {
+    const t = duck(len + 2)
+    for (let d = 0; d < len; d += 0.06) tone('square', 220 + (660 * d) / len, t + d, 0.02 + (0.04 * d) / len, 0.015, fx)
+  },
+  crash() {
+    const t = duck(2)
+    bleeps(t, [523, 659, 784, 1047, 1568], 0.06)
+    burst(t + 0.3, 0.2, 0.4, ['highpass', 4000], fx)
+  },
+  alarm() {
+    const t = duck(2.5)
+    for (let i = 0; i < 6; i++) tone('sawtooth', i % 2 ? 660 : 880, t + i * 0.22, 0.07, 0.2, fx, 0.2)
+  },
+  tick() {
+    keystrokes(ctx!.currentTime, 1)
+    tone('sine', 120, ctx!.currentTime, 0.2, 0.03, fx)
+  },
+}
+let skin = 'quote'
+export const setSkin = (s: string) => void (skin = s)
+
 // Silent until the first click has created the AudioContext.
-export const sfx = Object.fromEntries(Object.entries(sounds).map(([k, f]) => [k, (...a: [never]) => ctx && f(...a)])) as typeof sounds
+export const sfx = Object.fromEntries(Object.entries(sounds).map(([k, f]) => [k, (...a: [never]) => ctx && ((skin === 'terminal' && term[k as keyof typeof sounds]) || f)(...a)])) as typeof sounds

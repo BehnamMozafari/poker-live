@@ -1,9 +1,13 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import { useContext, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { CHIPS, ink, usd, ordinal, clock, dur, lines, delta, type Session, type Line, type Event, type Who, type Player, type Leader, type Fact } from './data.ts'
 import type { Payment } from './settle.ts'
 import { sfx } from './audio.ts'
+import { Skin, Identicon, Tag, Blocks, Figlet, Scramble, Boot, MatrixRain, CharGrid } from './Term.tsx'
+import { spark, snake } from './term.ts'
 
 export const vars = (o: Record<string, string | number>) => o as CSSProperties
+// Labels: as written in Quote, snake_case in Terminal (`alt` when the terminal word differs).
+const useL = () => { const t = useContext(Skin); return (s: string, alt?: string) => (t ? alt ?? snake(s) : s) } // prettier-ignore
 
 const BANDS = [0, 0.07, 0.15, 0.4, 0.6, 0.85, 0.93, 1]
 // Shared SVG gradients: striped chip edges per colour, cylinder shading.
@@ -27,8 +31,9 @@ export function ChipDefs() {
   )
 }
 
-// Initials in a ring of the player's colour; the dashed inner ring is the chip edge.
-export function Avatar({ p }: { p: Player }) {
+// Initials in a ring of the player's colour; the dashed inner ring is the chip edge. Terminal: identicon, or [AL] when `dense`.
+export function Avatar({ p, dense }: { p: Player; dense?: boolean }) {
+  if (useContext(Skin)) return dense ? <Tag p={p} /> : <Identicon p={p} />
   const c = ink(p.color)
   const initials = p.name.trim().split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase()
   return (
@@ -45,7 +50,8 @@ export function Avatar({ p }: { p: Player }) {
 // Side-on chip stacks, one chip per buy-in, 5 to a stack. New chips drop in; hovering the row fans them.
 const R = 24, T = 15, H = 2 * R + 5 * T + 4
 export function Stack({ n, color }: { n: number; color: string }) {
-  const mounted = useRef(n).current
+  const term = useContext(Skin), mounted = useRef(n).current
+  if (term) return <Blocks n={n} color={color} />
   const shown = Math.min(n, 20), stacks = Math.ceil(shown / 5)
   const [face, edge] = CHIPS[color] ?? CHIPS.gray
   return (
@@ -73,16 +79,25 @@ export function Stack({ n, color }: { n: number; color: string }) {
 }
 
 export function Header({ night, now }: { night?: Session; now: number }) {
+  const term = useContext(Skin)
   return (
     <header className="hdr">
       <div className="bar">
-        <span className="brand">
-          <i>♠</i>Poker Live{night && <em>{night.name}</em>}
-        </span>
+        {term ? (
+          <span className="prompt">
+            <b>dealer@felt</b>:<em>~/nights</em>$ {night && `./live --night ${snake(night.name)}`}
+            <i className="caret">█</i>
+          </span>
+        ) : (
+          <span className="brand">
+            <i>♠</i>Poker Live{night && <em>{night.name}</em>}
+          </span>
+        )}
         {night && (
           <span className="live">
             <i />
-            Live · {dur(now - night.startedAt)}
+            {term ? 'uptime ' : 'Live · '}
+            {dur(now - night.startedAt)}
           </span>
         )}
         <b className="num">{clock(now)}</b>
@@ -95,6 +110,7 @@ export function Header({ night, now }: { night?: Session; now: number }) {
 // Tonight as a stock quote: money in play is the price, the session its step chart (hover for any moment).
 function Quote({ night, now }: { night: Session; now: number }) {
   const [hover, setHover] = useState<number>()
+  const term = useContext(Skin), L = useL()
   const pts: [number, number][] = [[night.startedAt, 0]]
   for (const e of night.events) pts.push([e.t, pts.at(-1)![1] + delta(e)])
   const ls = lines(night), t0 = night.startedAt, t1 = Math.max(now, pts.at(-1)![0] + 1), cur = pts.at(-1)![1], high = Math.max(...pts.map(p => p[1]))
@@ -104,7 +120,7 @@ function Quote({ night, now }: { night: Session; now: number }) {
   return (
     <div className="quote">
       <div>
-        <small>In play</small>
+        <small>{L('In play')}</small>
         <b className="price num">{usd(cur)}</b>
         <dl>
           {[
@@ -141,10 +157,14 @@ function Quote({ night, now }: { night: Session; now: number }) {
         <i className="tip" style={{ top: Y(cur) + '%' }} />
         {at && hover !== undefined && (
           <span className={hover > 75 ? 'cross flip' : 'cross'} style={vars({ left: hover + '%', '--y': Y(at[1]) + '%' })}>
-            <span>
-              <b className="num">{usd(at[1])}</b>
-              {clock(t0 + (hover / 100) * (t1 - t0))}
-            </span>
+            {term ? (
+              <span className="num">{`[t=${clock(t0 + (hover / 100) * (t1 - t0))} px=${usd(at[1])}]`}</span>
+            ) : (
+              <span>
+                <b className="num">{usd(at[1])}</b>
+                {clock(t0 + (hover / 100) * (t1 - t0))}
+              </span>
+            )}
           </span>
         )}
       </div>
@@ -153,7 +173,7 @@ function Quote({ night, now }: { night: Session; now: number }) {
 }
 
 export function LiveBoard({ night, who, flash, onPick }: { night: Session; who: Who; flash?: string; onPick: (id: string) => void }) {
-  const ls = lines(night), cols = ls.length > 8 ? 2 : 1
+  const ls = lines(night), cols = ls.length > 8 ? 2 : 1, L = useL()
   if (!ls.length) return <div className="empty">Nobody at the table yet. Move the mouse → ＋ Player</div>
   return (
     <div className="board" style={vars({ '--cols': cols, '--rows': Math.ceil(ls.length / cols) })}>
@@ -165,18 +185,18 @@ export function LiveBoard({ night, who, flash, onPick }: { night: Session; who: 
             <Avatar p={p} />
             <div className="who">
               <b>{p.name}</b>
-              <small>{l.seated ? `In since ${clock(l.first)}` : `Cashed out ${usd(l.out)}`}</small>
+              <small>{l.seated ? `${L('In since')} ${clock(l.first)}` : `${L('Cashed out')} ${usd(l.out)}`}</small>
             </div>
             <Stack n={l.buyins} color={p.color} />
             <span className="rebuys">
               {l.rebuys > 0 && (
                 <>
-                  <small>Rebuys</small>×{l.rebuys}
+                  <small>{L('Rebuys')}</small>×{l.rebuys}
                 </>
               )}
             </span>
             <span className="money">
-              <small>{l.seated ? 'In' : 'Net'}</small>
+              <small>{l.seated ? L('In', 'money_in') : L('Net', 'net_pnl')}</small>
               <b className={l.seated ? '' : l.net >= 0 ? 'win' : 'loss'}>{l.seated ? usd(l.in) : usd(l.net, true)}</b>
             </span>
             </span>
@@ -198,15 +218,17 @@ const Title = ({ kicker, title }: { kicker: string; title: string }) => (
 
 // All-time profit after each night, from $0.
 function Trend({ pts }: { pts: number[] }) {
-  const v = [0, ...pts], lo = Math.min(...v), hi = Math.max(...v)
+  const v = [0, ...pts], lo = Math.min(...v), hi = Math.max(...v), cls = v.at(-1)! >= 0 ? 'win' : 'loss'
+  if (useContext(Skin)) return <span className={`trend-txt ${cls}`}>{spark(v.slice(-16))}</span>
   return (
-    <svg className={`trend ${v.at(-1)! >= 0 ? 'win' : 'loss'}`} viewBox="0 0 100 30" preserveAspectRatio="none" aria-hidden>
+    <svg className={`trend ${cls}`} viewBox="0 0 100 30" preserveAspectRatio="none" aria-hidden>
       <polyline points={v.map((y, i) => `${(i / (v.length - 1)) * 100},${28 - ((y - lo) / (hi - lo || 1)) * 26}`).join(' ')} vectorEffect="non-scaling-stroke" />
     </svg>
   )
 }
 
 export function Leaders({ rows, who, nights, series }: { rows: Leader[]; who: Who; nights: number; series: Record<string, number[]> }) {
+  const L = useL()
   return (
     <section className="body">
       <Title kicker={`${nights} night${nights > 1 ? 's' : ''} played`} title="All-time leaderboard" />
@@ -216,7 +238,7 @@ export function Leaders({ rows, who, nights, series }: { rows: Leader[]; who: Wh
           <span />
           <span>Player</span>
           <span>Nights</span>
-          <span>Best night</span>
+          <span>{L('Best night')}</span>
           <span>Streak</span>
           <span>Trend</span>
           <span>Net</span>
@@ -239,13 +261,14 @@ export function Leaders({ rows, who, nights, series }: { rows: Leader[]; who: Wh
 }
 
 export function Facts({ items, who }: { items: Fact[]; who: Who }) {
+  const L = useL()
   return (
     <section className="body">
       <Title kicker="Tonight" title="The story so far" />
       <div className="facts">
         {items.map((f, i) => (
           <div key={f.k} className="fact glow" style={vars({ '--c': f.id ? ink(who(f.id).color) : 'var(--fg)', animationDelay: `${i * 90}ms` })}>
-            <small>{f.k}</small>
+            <small>{L(f.k)}</small>
             {f.id ? (
               <>
                 <div className="fact-who">
@@ -264,14 +287,27 @@ export function Facts({ items, who }: { items: Fact[]; who: Who }) {
   )
 }
 
-export function Ticker({ tag, items }: { tag: string; items: string[] }) {
-  const seq = [...items, ...items, ...items, ...items]
+// Terminal: a tmux status line, the idle rotation as windows (`*` = showing) and the secret timer as just "armed".
+export function Ticker({ tag, items, tabs = [], cur, armed }: { tag: string; items: string[]; tabs?: string[]; cur?: string; armed?: boolean }) {
+  const seq = [...items, ...items, ...items, ...items], term = useContext(Skin)
   return (
     <div className="ticker">
-      <span className="tag">
-        <i />
-        {tag}
-      </span>
+      {term ? (
+        <>
+          <span className="tag">[poker]</span>
+          {tabs.map((t, i) => (
+            <span key={t} className={t === cur ? 'tab on' : 'tab'}>
+              {i}:{t}
+              {t === cur && '*'}
+            </span>
+          ))}
+        </>
+      ) : (
+        <span className="tag">
+          <i />
+          {tag}
+        </span>
+      )}
       <div className="track-wrap">
         <div className="track" style={{ animationDuration: `${Math.max(30, items.join('').length * 0.5)}s` }}>
           {seq.map((t, i) => (
@@ -279,13 +315,36 @@ export function Ticker({ tag, items }: { tag: string; items: string[] }) {
           ))}
         </div>
       </div>
+      {term && armed && <span className="tab">⏱ armed</span>}
     </div>
   )
 }
 
 // Slides in on each buy-in / rebuy / cash-out; the bar along the bottom runs down its time on screen.
+// Terminal: the event as a command typing out in a stdout box, then its exit status.
 export function Toast({ e, line, p }: { e: Event; line: Line; p: Player }) {
   const re = e.type === 'buyin' && line.buyins > 1
+  if (useContext(Skin)) {
+    const verb = e.type === 'cashout' ? 'cashout' : re ? 'rebuy' : 'buyin'
+    const rest = `.${verb}(${usd(e.cents)})${re ? `  // ${ordinal(line.rebuys)} rebuy` : ''}`
+    const ok = e.type !== 'cashout' || line.net >= 0
+    return (
+      <div className={`toast tty ${re ? 'rebuy' : e.type}`} style={vars({ '--c': ink(p.color), '--n': p.name.length + rest.length + 2 })}>
+        <Avatar p={p} />
+        <div>
+          <small>stdout</small>
+          <code className="type cmd">
+            {'> '}
+            <span style={{ color: 'var(--c)' }}>{p.name}</span>
+            {rest}
+          </code>
+          <span className={`st up ${ok ? 'win' : 'loss'}`}>
+            {e.type === 'cashout' ? `[ EXIT ${ok ? 0 : 1} ] ${usd(line.net, true)}` : `[ OK ] total_in ${usd(line.in)}`}
+          </span>
+        </div>
+      </div>
+    )
+  }
   const [tag, text] =
     e.type === 'cashout' ? ['Cash out', `Cashes out ${usd(e.cents)}`] : re ? ['Rebuy', `${ordinal(line.rebuys)} rebuy · ${usd(e.cents)}`] : ['Buy-in', `Buys in · ${usd(e.cents)}`]
   return (
@@ -309,6 +368,7 @@ export function Final({ night, who, pays }: { night: Session; who: Who; pays: Pa
   const ls = lines(night).sort((a, b) => b.net - a.net)
   const [shown, setShown] = useState(0)
   const [view, setView] = useState<'results' | 'pay'>('results')
+  const term = useContext(Skin), done = shown >= ls.length, champ = ls[0] && who(ls[0].id)
   useEffect(() => {
     if (shown >= ls.length) {
       const t = setTimeout(() => setView(v => (v === 'results' ? 'pay' : 'results')), view === 'results' ? 12e3 : 20e3)
@@ -332,7 +392,7 @@ export function Final({ night, who, pays }: { night: Session; who: Who; pays: Pa
                   <Avatar p={who(p.from)} />
                   {who(p.from).name}
                 </span>
-                <span className="pays-word">pays</span>
+                <span className="pays-word">{term ? '→' : 'pays'}</span>
                 <span className="pay-who">
                   <Avatar p={who(p.to)} />
                   {who(p.to).name}
@@ -349,24 +409,36 @@ export function Final({ night, who, pays }: { night: Session; who: Who; pays: Pa
 
   return (
     <section className="body">
-      <Title kicker={night.name} title="Final results" />
+      {term && done && champ ? (
+        <div className="title" style={vars({ '--c': ink(champ.color) })}>
+          <small>{snake(night.name)} · winner</small>
+          <Figlet text={champ.name} max={1.1} />
+        </div>
+      ) : (
+        <Title kicker={night.name} title="Final results" />
+      )}
+      {term && !done && (
+        <p className="compile num">
+          compiling results… [{'█'.repeat(Math.round((shown / ls.length) * 20)).padEnd(20, '░')}] {Math.round((shown / ls.length) * 100)}%
+        </p>
+      )}
       <div className="results">
         {ls.map((l, i) => {
-          const p = who(l.id)
+          const p = who(l.id), on = i >= ls.length - shown
           return (
-            <div key={l.id} className={`res glow${i >= ls.length - shown ? ' on' : ''}${i === 0 ? ' champ' : ''}`} style={vars({ '--c': ink(p.color) })}>
+            <div key={l.id} className={`res glow${on ? ' on' : ''}${i === 0 ? ' champ' : ''}`} style={vars({ '--c': ink(p.color) })}>
               <span className="rank num">{rank(i)}</span>
               <Avatar p={p} />
-              <b>{p.name}</b>
+              <b>{term && on ? <Scramble text={p.name} /> : p.name}</b>
               <span className="dim num">
                 in {usd(l.in)} · out {usd(l.out + l.adj)}
               </span>
-              <b className={`num ${l.net >= 0 ? 'win' : 'loss'}`}>{usd(l.net, true)}</b>
+              <b className={`num ${l.net >= 0 ? 'win' : 'loss'}`}>{term && on ? <Scramble text={usd(l.net, true)} /> : usd(l.net, true)}</b>
             </div>
           )
         })}
       </div>
-      {shown === ls.length && <Confetti />}
+      {done && (term ? champ && <MatrixRain color={ink(champ.color)} /> : <Confetti />)}
     </section>
   )
 }
@@ -383,7 +455,18 @@ function Confetti() {
   )
 }
 
-export function Home({ onStart }: { onStart: () => void }) {
+export function Home({ onStart, nights, players }: { onStart: () => void; nights: number; players: number }) {
+  if (useContext(Skin))
+    return (
+      <section className="home tty">
+        <Boot nights={nights} players={players} />
+        <Figlet text="Poker Live" />
+        <p>
+          press enter or <button className="btn primary" onClick={onStart}>start tonight's game</button>
+          <i className="caret">█</i>
+        </p>
+      </section>
+    )
   return (
     <section className="home">
       <span className="mark">♠</span>
@@ -397,22 +480,34 @@ export function Home({ onStart }: { onStart: () => void }) {
 }
 
 // A random-walk "price" across the screen; `up` = it closed higher than it opened.
-function walk() {
-  const y0 = 25 + Math.random() * 40
+function walk(y0 = 25 + Math.random() * 40) {
   let y = y0, d = `M-2 ${y0}`
   for (let x = 0.5; x <= 162; x += 2.5) d += `L${x} ${(y = Math.min(85, Math.max(5, y + (Math.random() - 0.5) * 5))).toFixed(1)}`
   return { d, up: y < y0 }
 }
 
-type Bit = { id: number; kind: string; x: number; y: number; z: number; d?: string; up?: boolean }
+// Terminal bits: 20 walks from one point (Monte Carlo), a `tail -f` of tonight's log, a flickering order book.
+const fan = (y0 = 35 + Math.random() * 20) => Array.from({ length: 20 }, () => walk(y0))
+const SYS = ['GET /leaderboard 200 OK 4ms', 'cron: jazz.service next bar', 'GET /history.json 304', 'ws: heartbeat ok', 'gc: freed 2.1MB', 'POST /timer/arm 204', 'eval: equity 1,712,304 runouts']
+const tail = (feed: string[]) => [...feed, ...SYS.map(s => `[${new Date().toLocaleTimeString('en-GB')}] ${s}`)].sort(() => Math.random() - 0.5).slice(0, 4) // ponytail: biased shuffle, fine for decoration
+function book() {
+  const mid = 50 + Math.random() * 400
+  return Array.from({ length: 8 }, (_, i) => `${(mid + (3.5 - i) * 0.25).toFixed(2).padStart(7)} ${String(((Math.random() * 90 + 10) | 0) * 100).padStart(6)}`)
+}
+
+type Bit = { id: number; kind: string; x: number; y: number; z: number; d?: string; up?: boolean; paths?: { d: string; up: boolean }[]; txt?: string[] }
 const KINDS = ['walk', 'walk', 'suit', 'ping', 'streak']
+const TERM_KINDS = ['fan', 'tail', 'tail', 'book', 'streak']
 let bitId = 0 // module-level: StrictMode remounts the effect while old bits are still on screen
 
 // Background life: drifting aurora, a dot grid the cursor lights up, a trailing ring cursor that swells over
 // anything clickable, a ping on every click, and every few seconds one random animation (price line, suit, ping, streak).
-export function Ambient() {
+export function Ambient({ feed }: { feed: string[] }) {
   const [bits, setBits] = useState<Bit[]>([])
   const spot = useRef<HTMLDivElement>(null), ring = useRef<HTMLDivElement>(null)
+  const term = useContext(Skin), now = useRef({ term, feed }) // for the spawn loop, registered once
+  now.current = { term, feed }
+  useEffect(() => setBits([]), [term]) // each theme's bits only have styles in that theme
   useEffect(() => {
     let t = 0
     const add = (b: Omit<Bit, 'id'>) => {
@@ -420,8 +515,9 @@ export function Ambient() {
       setBits(bs => [...bs.slice(-9), { ...b, id }])
     }
     const spawn = () => {
-      const kind = KINDS[(Math.random() * KINDS.length) | 0]
-      add({ kind, x: 5 + Math.random() * 90, y: 5 + Math.random() * 90, z: Math.random(), ...(kind === 'walk' ? walk() : {}) })
+      const ks = now.current.term ? TERM_KINDS : KINDS, kind = ks[(Math.random() * ks.length) | 0], text = kind === 'tail' || kind === 'book'
+      const extra = kind === 'walk' ? walk() : kind === 'fan' ? { paths: fan() } : kind === 'tail' ? { txt: tail(now.current.feed) } : kind === 'book' ? { txt: book() } : {}
+      add({ kind, x: 5 + Math.random() * (text ? 55 : 90), y: 5 + Math.random() * (text ? 70 : 90), z: Math.random(), ...extra })
       t = setTimeout(spawn, 2500 + Math.random() * 5000)
     }
     const move = (e: PointerEvent) => {
@@ -451,8 +547,23 @@ export function Ambient() {
         <i className="aurora a3" />
         <div className="grid" />
         <div ref={spot} className="grid spot" />
+        {term && <CharGrid />}
         {bits.map(b =>
-          b.kind === 'walk' ? (
+          b.paths ? (
+            <svg key={b.id} className="bit walk fan" viewBox="0 0 160 90" preserveAspectRatio="none">
+              {b.paths.map((p, i) => (
+                <path key={i} d={p.d} pathLength={1} className={p.up ? 'win' : 'loss'} />
+              ))}
+            </svg>
+          ) : b.txt ? (
+            <pre key={b.id} className={`bit ${b.kind}`} style={{ left: b.x + '%', top: b.y + '%' }}>
+              {b.txt.map((t, i) => (
+                <span key={i} className={b.kind === 'tail' ? 'type' : i < 4 ? 'loss' : 'win'} style={vars({ '--n': t.length, animationDelay: `${i * 0.7}s` })}>
+                  {t}
+                </span>
+              ))}
+            </pre>
+          ) : b.kind === 'walk' ? (
             <svg key={b.id} className={`bit walk ${b.up ? 'win' : 'loss'}`} viewBox="0 0 160 90" preserveAspectRatio="none">
               <path d={b.d} pathLength={1} />
             </svg>

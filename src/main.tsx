@@ -1,16 +1,20 @@
 import { StrictMode, useEffect, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
-import { load, save, live, ended, facts, leaderboard, profitSeries, payments, announce, usd, roll, type News, type Mut, type Who } from './data.ts'
-import { unlock, setMusic, setVolume, sfx } from './audio.ts'
+import { load, save, live, ended, facts, leaderboard, profitSeries, payments, announce, usd, roll, ink, type News, type Mut, type Who } from './data.ts'
+import { unlock, setMusic, setVolume, setSkin, sfx } from './audio.ts'
 import { vars, ChipDefs, Header, LiveBoard, Leaders, Facts, Ticker, Toast, Final, Home, Ambient } from './Board.tsx'
+import { Skin, Boot, Figlet, MatrixRain } from './Term.tsx'
 import { PlayerSheet, AddSheet, NewNight, LogSheet, SettleSheet, HistorySheet, SettingsSheet, SeatsSheet, EquitySheet } from './Sheets.tsx'
 import './index.css'
+import './terminal.css'
 import seed from '../history.json?raw'
 
 type SheetKind = 'add' | 'new' | 'log' | 'settle' | 'history' | 'settings' | 'seats' | 'odds'
 type Open = { kind: 'player'; id: string; back?: SheetKind } | { kind: SheetKind; q?: string } | null
 
 const fullscreen = () => (document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen()).catch(() => {})
+
+const PANE: Record<string, string> = { board: 'positions', leaders: 'leaderboard', facts: 'story', home: 'tty1' }
 
 const T = ({ icon, label, on, primary, off }: { icon: string; label: string; on: () => void; primary?: boolean; off?: boolean }) => (
   <button className={primary ? 'tb primary' : 'tb'} onClick={on} disabled={off}>
@@ -29,13 +33,15 @@ function App() {
   const [third, setThird] = useState<News>()
   const [due, setDue] = useState<number>() // hidden timer: when it next goes off
   const [alarm, setAlarm] = useState<number>()
+  const [rain, setRain] = useState<{ k: number; c: string }>() // Terminal: a big cash-out rains in the player's colour
+  const [boot, setBoot] = useState<number>() // Terminal: boot overlay after switching to it
   const latest = useRef(data) // for window listeners registered once
   latest.current = data
 
   const mut: Mut = fn => setData(d => { const n = structuredClone(d); fn(n); return n }) // prettier-ignore
   const byId = new Map(data.players.map(p => [p.id, p]))
   const who: Who = id => byId.get(id) ?? { id, name: '?', color: 'gray' }
-  const night = live(data), history = ended(data)
+  const night = live(data), history = ended(data), theme = data.settings.theme, term = theme === 'terminal'
   const undo = () => mut(d => void live(d)?.events.pop())
 
   useEffect(() => save(data), [data])
@@ -54,7 +60,29 @@ function App() {
     setPanel(0)
     if (n.e.type === 'cashout') sfx.cashout()
     else sfx.buyin(n.line.buyins > 1)
+    if (n.e.type === 'cashout' && n.line.out >= 2 * n.line.in) setRain({ k: n.e.t, c: ink(who(n.e.player).color) })
   }, [night])
+  useEffect(() => {
+    if (!rain) return
+    const t = setTimeout(() => setRain(undefined), 8000)
+    return () => clearTimeout(t)
+  }, [rain])
+
+  // Theme: tokens and fonts switch on <html data-theme>, sounds in audio.ts. Switching to Terminal boots it; any key or click skips.
+  const shown = useRef(theme)
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme
+    setSkin(theme)
+    if (shown.current !== theme && term) setSheet(null), setBoot(Date.now()), sfx.type(40)
+    shown.current = theme
+  }, [theme])
+  useEffect(() => {
+    if (!boot) return
+    const end = () => setBoot(undefined), t = setTimeout(end, 3400)
+    addEventListener('keydown', end)
+    addEventListener('pointerdown', end)
+    return () => (clearTimeout(t), removeEventListener('keydown', end), removeEventListener('pointerdown', end))
+  }, [boot])
   useEffect(() => {
     if (!third) return
     const t = setTimeout(() => setThird(undefined), 5200)
@@ -64,7 +92,7 @@ function App() {
   useEffect(() => {
     if (!due) return
     if (!night) return setDue(undefined) // night over: the next one starts with the timer off
-    const t = setTimeout(() => (sfx.crash(), setAlarm(Date.now()), setDue(Date.now() + roll(data.settings.timer))), due - Date.now())
+    const t = setTimeout(() => (sfx.alarm(), setAlarm(Date.now()), setDue(Date.now() + roll(data.settings.timer))), due - Date.now())
     return () => clearTimeout(t)
   }, [due, !night])
   useEffect(() => {
@@ -102,6 +130,7 @@ function App() {
       if ((e.target as Element).closest?.('input, select, textarea')) return
       if ((e.metaKey || e.ctrlKey) && e.key === 'z') e.preventDefault(), undo()
       else if (e.key === 'f' && !e.metaKey && !e.ctrlKey) fullscreen()
+      else if (e.key === 'Enter' && !live(latest.current) && !(e.target as Element).closest?.('button, dialog')) setSheet(s => s ?? { kind: 'new' })
       // ponytail: lowercase f stays fullscreen, so a name starting with F needs Shift
       else if (/^[a-z]$/i.test(e.key) && !e.metaKey && !e.ctrlKey && !e.altKey && live(latest.current)) e.preventDefault(), setSheet(s => s ?? { kind: 'add', q: e.key })
     }
@@ -131,16 +160,18 @@ function App() {
     ...tonight.map(f => `${f.k}: ${f.id ? who(f.id).name + ' · ' : ''}${f.v}`),
     ...lb.slice(0, 3).map((r, i) => `All-time #${i + 1}: ${who(r.id).name} ${usd(r.net, true)}`),
   ]
+  const feed = (night?.events ?? []).slice(-8).map(e => `[${new Date(e.t).toLocaleTimeString('en-GB')}] POST /${who(e.player).name.toLowerCase()}/${e.type} ${usd(e.cents)} 200 OK`)
   const close = () => setSheet(s => (s?.kind === 'player' && s.back ? { kind: s.back } : null))
   const props = { data, mut, who, onClose: close }
 
   return (
-    <div className={awake || sheet ? 'app' : 'app sleep'}>
+    <Skin value={term}>
+    <div className={(awake || sheet ? 'app' : 'app sleep') + (alarm ? ' alarm' : '')}>
       <ChipDefs />
-      <Ambient />
+      <Ambient feed={feed} />
       <div className="stage">
         <Header night={night} now={now} />
-        <main key={final ? 'final' : cur} className="panel">
+        <main key={final ? 'final' : cur} className="panel" data-title={final ? 'results' : PANE[cur]}>
           {final && night ? (
             <Final night={night} who={who} pays={payments(night)} />
           ) : cur === 'board' && night ? (
@@ -150,7 +181,7 @@ function App() {
           ) : cur === 'facts' ? (
             <Facts items={tonight} who={who} />
           ) : (
-            <Home onStart={() => setSheet({ kind: 'new' })} />
+            <Home onStart={() => setSheet({ kind: 'new' })} nights={history.length} players={data.players.length} />
           )}
         </main>
         {awake || sheet ? (
@@ -186,18 +217,25 @@ function App() {
             <T icon="⛶" label="Full" on={fullscreen} />
           </nav>
         ) : (
-          <Ticker tag={night ? 'Tonight' : 'Poker Live'} items={ticker.length ? ticker : ['Move the mouse for controls', 'Click a player to rebuy or cash out', '⌘Z undoes', 'F for fullscreen']} />
+          <Ticker tag={night ? 'Tonight' : 'Poker Live'} tabs={panels} cur={cur} armed={!!due} items={ticker.length ? ticker : ['Move the mouse for controls', 'Click a player to rebuy or cash out', '⌘Z undoes', 'F for fullscreen']} />
         )}
       </div>
       {third && <Toast key={third.e.t} {...third} p={who(third.e.player)} />}
       {sheet?.kind === 'player' && night && <PlayerSheet key={sheet.id} {...props} id={sheet.id} />}
       {alarm && (
-        <div key={alarm} className="toast" style={vars({ '--c': 'var(--amber)' })}>
+        <div key={alarm} className={term ? 'toast tty' : 'toast'} style={vars({ '--c': 'var(--amber)' })}>
           <div>
-            <small>Timer</small>
-            <b>Time!</b>
-            <span>Next one's a secret</span>
+            <small>{term ? 'stderr' : 'Timer'}</small>
+            <b className="up">{term ? '!! SIGALRM' : 'Time!'}</b>
+            <span>{term ? 'timer fired · next one is a secret' : "Next one's a secret"}</span>
           </div>
+        </div>
+      )}
+      {rain && term && <MatrixRain key={rain.k} color={rain.c} />}
+      {boot && term && (
+        <div className="boot-over" key={boot}>
+          <Boot nights={history.length} players={data.players.length} />
+          <Figlet text="Poker Live" />
         </div>
       )}
       {sheet?.kind === 'add' && night && <AddSheet {...props} q={sheet.q} onPick={id => setSheet({ kind: 'player', id })} />}
@@ -209,6 +247,7 @@ function App() {
       {sheet?.kind === 'history' && <HistorySheet {...props} />}
       {sheet?.kind === 'settings' && <SettingsSheet {...props} />}
     </div>
+    </Skin>
   )
 }
 

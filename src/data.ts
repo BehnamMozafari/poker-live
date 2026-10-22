@@ -4,7 +4,7 @@ export type Player = { id: string; name: string; color: string }
 export type Event = { t: number; type: 'buyin' | 'cashout' | 'adjust'; player: string; cents: number }
 export type Session = { id: string; name: string; startedAt: number; endedAt?: number; defaultBuyIn: number; banker?: boolean; host?: string; events: Event[] }
 export type Timer = { mean: number; stdev: number; min: number } // minutes
-export type Settings = { defaultBuyIn: number; buyIns: number[]; denoms: Record<string, number>; volume: number; music: boolean; timer: Timer }
+export type Settings = { defaultBuyIn: number; buyIns: number[]; denoms: Record<string, number>; volume: number; music: boolean; timer: Timer; theme: 'quote' | 'terminal' }
 export type Data = { players: Player[]; sessions: Session[]; settings: Settings }
 
 // Chip colours double as player colours: face, edge spots, ink (readable on the dark background for text/lines).
@@ -28,6 +28,7 @@ const DEFAULTS: Settings = {
   volume: 0.6,
   music: true,
   timer: { mean: 20, stdev: 5, min: 10 },
+  theme: 'quote',
 }
 
 // Storage: the only code that knows the key or fills in missing settings.
