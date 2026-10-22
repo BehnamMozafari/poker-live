@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { CHIPS, DEFAULTS, ink, usd, cents, clock, uid, nightName, lines, live, ended, leaderboard, profitSeries, payments, parse, type Data, type Mut, type Who, type Session, type Settings } from './data.ts'
 import { split } from './settle.ts'
+import { runEquity, DECK, type EquityTally } from './equity.ts'
 import { Avatar, vars } from './Board.tsx'
 
 type P = { data: Data; mut: Mut; who: Who; onClose: () => void }
@@ -9,6 +10,7 @@ function Sheet({ title, onClose, wide, children }: { title: ReactNode; onClose: 
   const ref = useRef<HTMLDialogElement>(null)
   useEffect(() => {
     if (!ref.current?.open) ref.current?.showModal()
+    ref.current?.querySelector<HTMLElement>('[data-autofocus]')?.focus() // showModal would focus the ✕ first
   }, [])
   return (
     <dialog ref={ref} className={wide ? 'sheet wide' : 'sheet'} onClose={onClose} onClick={e => e.target === ref.current && onClose()}>
@@ -48,11 +50,12 @@ function Money({ value, onChange }: { value: number; onChange: (c: number) => vo
   )
 }
 
+const freeColor = (d: Data) => Object.keys(CHIPS).find(k => !d.players.some(p => p.color === k)) ?? 'gray'
+
 function NewPlayer({ data, mut, label, onAdd }: { data: Data; mut: Mut; label: string; onAdd: (id: string) => void }) {
-  const used = new Set(data.players.map(p => p.color))
   const [name, setName] = useState('')
   const [color, setColor] = useState<string>()
-  const c = color ?? Object.keys(CHIPS).find(k => !used.has(k)) ?? 'gray'
+  const c = color ?? freeColor(data)
   return (
     <form
       className="newp"
@@ -145,21 +148,36 @@ export function PlayerSheet({ data, mut, who, onClose, id }: P & { id: string })
   )
 }
 
-export function AddSheet({ data, mut, onClose }: P) {
-  const night = live(data)!, seated = new Set(lines(night).map(l => l.id))
+// Type a name, Enter: a regular sits down, tonight's player gets their own sheet, an unknown name joins as new.
+export function AddSheet({ data, mut, onClose, onPick, q: q0 = '' }: P & { onPick: (id: string) => void; q?: string }) {
+  const night = live(data)!, played = new Set(lines(night).map(l => l.id))
   const [amt, setAmt] = useState(night.defaultBuyIn)
+  const [q, setQ] = useState(q0)
   const seat = (id: string) => (mut(d => void live(d)!.events.push({ t: Date.now(), type: 'buyin', player: id, cents: amt })), onClose())
-  const free = data.players.filter(p => !seated.has(p.id))
+  const pick = (id: string) => (played.has(id) ? onPick(id) : seat(id))
+  const s = q.trim().toLowerCase(), starts = (n: string) => +n.toLowerCase().startsWith(s)
+  const hits = s ? data.players.filter(p => p.name.toLowerCase().includes(s)).sort((a, b) => starts(b.name) - starts(a.name)) : data.players.filter(p => !played.has(p.id))
+  const go = () => {
+    if (hits[0]) return pick(hits[0].id)
+    if (!s) return
+    const id = uid()
+    mut(d => void d.players.push({ id, name: q.trim(), color: freeColor(d) }))
+    seat(id)
+  }
   return (
     <Sheet title="Add to the table" onClose={onClose}>
       <h3>Buy-in</h3>
       <Seg options={amounts(data.settings, night.defaultBuyIn).map(c => [c, usd(c)])} value={amt} onChange={setAmt} />
-      {free.length > 0 && (
+      <form className="find" onSubmit={e => (e.preventDefault(), go())}>
+        <input data-autofocus placeholder="Type a name, Enter" value={q} maxLength={16} onChange={e => setQ(e.target.value)} />
+        <span className="dim">{hits[0] ? `↵ ${played.has(hits[0].id) ? 'open' : 'seat'} ${hits[0].name}` : s ? `↵ add ${q.trim()} as new` : ''}</span>
+      </form>
+      {hits.length > 0 && (
         <>
-          <h3>Regulars</h3>
+          <h3>{s ? 'Matches' : 'Regulars'}</h3>
           <div className="pills">
-            {free.map(p => (
-              <button key={p.id} className="pill" onClick={() => seat(p.id)}>
+            {hits.map(p => (
+              <button key={p.id} className={`pill${played.has(p.id) ? ' on' : ''}`} onClick={() => pick(p.id)}>
                 <Avatar p={p} />
                 {p.name}
               </button>
@@ -565,6 +583,17 @@ export function SettingsSheet({ data, mut, onClose }: P) {
           Volume <input type="range" min={0} max={1} step={0.05} value={s.volume} onChange={e => set(s => void (s.volume = +e.target.value))} />
         </label>
       </div>
+      <h3>Timer (minutes, rolled fresh each time, kept secret)</h3>
+      <div className="inline">
+        {(['mean', 'stdev', 'min'] as const).map(k => (
+          <label key={k} className="check">
+            {{ mean: 'Average', stdev: 'Give or take', min: 'At least' }[k]}
+            <span className="money-in">
+              <input inputMode="numeric" value={s.timer[k]} onChange={e => set(s => void (s.timer[k] = +e.target.value || 0))} />
+            </span>
+          </label>
+        ))}
+      </div>
       <h3>Backup</h3>
       <div className="inline">
         <button className="btn" onClick={() => exportJson(data)}>
@@ -590,6 +619,122 @@ export function SettingsSheet({ data, mut, onClose }: P) {
           />
         </label>
       </div>
+    </Sheet>
+  )
+}
+
+const shuffle = <T,>(a: T[]) => {
+  a = [...a]
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[a[i], a[j]] = [a[j], a[i]]
+  }
+  return a
+}
+
+// Random seats clockwise from the top; the top seat has the button.
+export function SeatsSheet({ data, who, onClose }: P) {
+  const ids = lines(live(data)!).filter(l => l.seated).map(l => l.id)
+  const [order, setOrder] = useState(() => shuffle(ids))
+  return (
+    <Sheet title="Seats" wide onClose={onClose}>
+      {order.length ? (
+        <div className="oval">
+          {order.map((id, i) => (
+            <span key={id} className="seat" style={vars({ '--x': Math.sin((i / order.length) * 2 * Math.PI), '--y': -Math.cos((i / order.length) * 2 * Math.PI) })}>
+              {i === 0 && <i className="dealer">D</i>}
+              <Avatar p={who(id)} />
+              {who(id).name}
+            </span>
+          ))}
+        </div>
+      ) : (
+        <p className="dim">Nobody's seated.</p>
+      )}
+      <button className="btn primary big wide" onClick={() => setOrder(shuffle(ids))}>
+        Shuffle again
+      </button>
+    </Sheet>
+  )
+}
+
+const SUIT: Record<string, string> = { s: '♠', h: '♥', d: '♦', c: '♣' }
+const choose = (n: number, k: number) => Array.from({ length: k }, (_, i) => (n - i) / (i + 1)).reduce((a, b) => a * b, 1)
+const pct = (n: number, of: number) => ((100 * n) / (of || 1)).toFixed(1) + '%'
+
+// Heads-up all-in odds: pick two hands and 0–5 board cards. Exact, worked through in 30ms slices so the UI stays live.
+export function EquitySheet({ onClose }: { onClose: () => void }) {
+  const [slots, setSlots] = useState<string[][]>([[], [], []]) // hand A, hand B, board
+  const [cur, setCur] = useState(0)
+  const [res, setRes] = useState<EquityTally>()
+  const max = [2, 2, 5], used = new Set(slots.flat())
+  const tap = (c: string) => {
+    if (used.has(c)) return setSlots(slots.map(x => x.filter(y => y !== c)))
+    if (slots[cur].length >= max[cur]) return
+    const n = slots.map((x, i) => (i === cur ? [...x, c] : x))
+    setSlots(n)
+    if (n[cur].length === max[cur] && cur < 2) setCur(cur + 1)
+  }
+  const ready = slots[0].length === 2 && slots[1].length === 2
+  useEffect(() => {
+    setRes(undefined)
+    if (!ready) return
+    const gen = runEquity(slots[0], slots[1], slots[2])
+    let t = 0
+    const step = () => {
+      const end = performance.now() + 30
+      let r = gen.next()
+      while (!r.done && performance.now() < end) r = gen.next()
+      setRes(r.value)
+      if (!r.done) t = setTimeout(step)
+    }
+    step()
+    return () => clearTimeout(t)
+  }, [slots.join('|')])
+  const total = choose(48 - slots[2].length, 5 - slots[2].length), A = ink('blue'), B = ink('red')
+  return (
+    <Sheet title="Odds" wide onClose={onClose}>
+      <div className="slots">
+        {['Hand A', 'Hand B', 'Board'].map((label, i) => (
+          <div key={i} className={`slot${i === cur ? ' on' : ''}`} onClick={() => setCur(i)}>
+            <small style={i < 2 ? { color: i ? B : A } : undefined}>{label}</small>
+            {slots[i].map(c => (
+              <button key={c} className={`card ${c[1]}`} onClick={e => (e.stopPropagation(), tap(c))}>
+                {c[0] + SUIT[c[1]]}
+              </button>
+            ))}
+          </div>
+        ))}
+      </div>
+      <div className="deck">
+        {DECK.map(c => (
+          <button key={c} className={`card ${c[1]}${used.has(c) ? ' used' : ''}`} onClick={() => tap(c)}>
+            {c[0] + SUIT[c[1]]}
+          </button>
+        ))}
+      </div>
+      {res ? (
+        <>
+          <div className="eqbar">
+            <i style={{ flex: res.a, background: A }} />
+            <i style={{ flex: res.tie, background: 'var(--line2)' }} />
+            <i style={{ flex: res.b, background: B }} />
+          </div>
+          <p className="eqnums num">
+            <b style={{ color: A }}>A {pct(res.a, res.total)}</b>
+            <span className="dim">
+              tie {pct(res.tie, res.total)} · {res.total < total ? `${pct(res.total, total)} of ` : ''}
+              {total.toLocaleString()} runouts
+            </span>
+            <b style={{ color: B }}>B {pct(res.b, res.total)}</b>
+          </p>
+        </>
+      ) : (
+        <p className="dim">Pick two cards for each hand.</p>
+      )}
+      <button className="btn wide" onClick={() => (setSlots([[], [], []]), setCur(0))}>
+        Clear
+      </button>
     </Sheet>
   )
 }

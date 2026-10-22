@@ -46,6 +46,12 @@ A player is "at the table" from their first buy-in; their last buy-in/cash-out d
 - **Readability:** everything sized in rem off a 16:9 frame (`html { font-size: min(2vh, 1.125vw) }`), rows sized with container query units, `tabular-nums`.
 - **OLED burn-in:** the whole stage drifts a few pixels over 15 minutes.
 
+## Table tools (added 2026-10-22)
+- **Type-to-find:** typing a letter on the board opens Add with that letter; Enter seats the top regular, opens tonight's player's sheet, or adds an unknown name as new. Lowercase `f` stays fullscreen.
+- **Seats:** shuffles who's seated round an oval; the top seat has the button.
+- **Timer:** secret countdown, normal(mean, stdev) minutes but never under min (Settings); alarm toast + crash, then re-rolls.
+- **Odds:** heads-up all-in equity, exact (every runout), worked through in 30ms slices so the bar fills live.
+
 ## v1.1+ (not in v1)
 - QR code per payment (Venmo pay link with the amount prefilled; check the link format first)
 - Phone remote via QR + PeerJS

@@ -1,17 +1,17 @@
 import { StrictMode, useEffect, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
-import { load, save, live, ended, lines, facts, leaderboard, profitSeries, payments, usd, type Data, type Event, type Mut, type Who } from './data.ts'
+import { load, save, live, ended, lines, facts, leaderboard, profitSeries, payments, usd, roll, type Data, type Event, type Mut, type Who } from './data.ts'
 import { unlock, setMusic, setVolume, sfx } from './audio.ts'
-import { ChipDefs, Header, LiveBoard, Leaders, Facts, Ticker, Toast, Final, Home, Ambient } from './Board.tsx'
-import { PlayerSheet, AddSheet, NewNight, LogSheet, SettleSheet, HistorySheet, SettingsSheet } from './Sheets.tsx'
+import { vars, ChipDefs, Header, LiveBoard, Leaders, Facts, Ticker, Toast, Final, Home, Ambient } from './Board.tsx'
+import { PlayerSheet, AddSheet, NewNight, LogSheet, SettleSheet, HistorySheet, SettingsSheet, SeatsSheet, EquitySheet } from './Sheets.tsx'
 import './index.css'
 import history from '../history.json?raw'
 
 // A browser with nothing saved (e.g. the Pages site) starts from the committed history.
 if (!localStorage.getItem('poker-live')) localStorage.setItem('poker-live', history)
 
-type SheetKind = 'add' | 'new' | 'log' | 'settle' | 'history' | 'settings'
-type Open = { kind: 'player'; id: string; back?: SheetKind } | { kind: SheetKind } | null
+type SheetKind = 'add' | 'new' | 'log' | 'settle' | 'history' | 'settings' | 'seats' | 'odds'
+type Open = { kind: 'player'; id: string; back?: SheetKind } | { kind: SheetKind; q?: string } | null
 
 const fullscreen = () => (document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen()).catch(() => {})
 
@@ -30,6 +30,8 @@ function App() {
   const [panel, setPanel] = useState(0)
   const [now, setNow] = useState(Date.now)
   const [third, setThird] = useState<Event>()
+  const [due, setDue] = useState<number>() // hidden timer: when it next goes off
+  const [alarm, setAlarm] = useState<number>()
   const seen = useRef(Date.now())
 
   const mut: Mut = fn => setData(d => { const n = structuredClone(d); fn(n); return n }) // prettier-ignore
@@ -65,6 +67,17 @@ function App() {
     return () => clearTimeout(t)
   }, [third])
 
+  useEffect(() => {
+    if (!due || !night) return
+    const t = setTimeout(() => (sfx.crash(), setAlarm(Date.now()), setDue(Date.now() + roll(data.settings.timer))), due - Date.now())
+    return () => clearTimeout(t)
+  }, [due, !night])
+  useEffect(() => {
+    if (!alarm) return
+    const t = setTimeout(() => setAlarm(undefined), 5200)
+    return () => clearTimeout(t)
+  }, [alarm])
+
   // Mouse/keys wake the controls; 3s idle hides them and the cursor, and starts the panel rotation.
   useEffect(() => {
     let t = 0
@@ -94,6 +107,8 @@ function App() {
       if ((e.target as Element).closest?.('input, select, textarea')) return
       if ((e.metaKey || e.ctrlKey) && e.key === 'z') e.preventDefault(), undo()
       else if (e.key === 'f' && !e.metaKey && !e.ctrlKey) fullscreen()
+      // ponytail: lowercase f stays fullscreen, so a name starting with F needs Shift
+      else if (/^[a-z]$/i.test(e.key) && !e.metaKey && !e.ctrlKey && !e.altKey && live(load())) e.preventDefault(), setSheet(s => s ?? { kind: 'add', q: e.key })
     }
     addEventListener('keydown', k)
     return () => removeEventListener('keydown', k)
@@ -156,6 +171,9 @@ function App() {
                 <T icon="↶" label="Undo" on={undo} off={!night.events.length} />
                 <T icon="☰" label="Log" on={() => setSheet({ kind: 'log' })} />
                 <T icon="■" label="End night" on={() => setSheet({ kind: 'settle' })} />
+                <span className="sep" />
+                <T icon="⇄" label="Seats" on={() => setSheet({ kind: 'seats' })} />
+                <T icon="⏱" label={due ? 'Stop timer' : 'Timer'} on={() => setDue(due ? undefined : Date.now() + roll(data.settings.timer))} />
               </>
             ) : (
               <T icon="♠" label="New night" primary on={() => setSheet({ kind: 'new' })} />
@@ -163,6 +181,7 @@ function App() {
             <span className="sep" />
             <T icon="★" label="History" on={() => setSheet({ kind: 'history' })} />
             <T icon="⚙" label="Settings" on={() => setSheet({ kind: 'settings' })} />
+            <T icon="%" label="Odds" on={() => setSheet({ kind: 'odds' })} />
             <span className="sep" />
             <button className={data.settings.music ? 'tb' : 'tb muted'} onClick={() => mut(d => void (d.settings.music = !d.settings.music))} aria-label="Toggle music">
               <i>♪</i>
@@ -177,7 +196,18 @@ function App() {
       </div>
       {third && night && <Toast key={third.t} e={third} line={lines(night).find(l => l.id === third.player)!} p={who(third.player)} />}
       {sheet?.kind === 'player' && night && <PlayerSheet key={sheet.id} {...props} id={sheet.id} />}
-      {sheet?.kind === 'add' && night && <AddSheet {...props} />}
+      {alarm && (
+        <div key={alarm} className="toast" style={vars({ '--c': 'var(--amber)' })}>
+          <div>
+            <small>Timer</small>
+            <b>Time!</b>
+            <span>Next one's a secret</span>
+          </div>
+        </div>
+      )}
+      {sheet?.kind === 'add' && night && <AddSheet {...props} q={sheet.q} onPick={id => setSheet({ kind: 'player', id })} />}
+      {sheet?.kind === 'seats' && night && <SeatsSheet {...props} />}
+      {sheet?.kind === 'odds' && <EquitySheet onClose={close} />}
       {sheet?.kind === 'new' && <NewNight {...props} />}
       {sheet?.kind === 'log' && night && <LogSheet {...props} />}
       {sheet?.kind === 'settle' && night && <SettleSheet {...props} onPick={id => setSheet({ kind: 'player', id, back: 'settle' })} onReveal={() => (setSheet(null), setFinal(true))} />}

@@ -19,6 +19,9 @@ export const ink = (color: string) => (CHIPS[color] ?? CHIPS.gray)[2]
 export type Mut = (fn: (d: Data) => void) => void
 export type Who = (id: string) => Player
 
+// Minutes until the hidden timer goes off: normal(mean, stdev) by Box–Muller, never under `min`. Returns ms.
+export const roll = ({ mean, stdev, min }: Timer, r = Math.random) => Math.max(min, mean + stdev * Math.sqrt(-2 * Math.log(1 - r())) * Math.cos(2 * Math.PI * r())) * 6e4
+
 export const DEFAULTS: Settings = {
   defaultBuyIn: 5000,
   buyIns: [2500, 5000, 10000],

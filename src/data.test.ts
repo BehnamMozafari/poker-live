@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { lines, inPlay, facts, leaderboard, profitSeries, ordinal, usd, type Session, type Event } from './data.ts'
+import { lines, inPlay, facts, leaderboard, profitSeries, ordinal, usd, roll, type Session, type Event } from './data.ts'
 
 const night = (events: Event[], startedAt = 0): Session => ({ id: 'n', name: 'x', startedAt, endedAt: startedAt + 1, defaultBuyIn: 5000, events })
 const e = (t: number, type: Event['type'], player: string, cents: number): Event => ({ t, type, player, cents })
@@ -34,4 +34,11 @@ test('leaderboard + running profit across nights', () => {
 test('formatting', () => {
   assert.deepEqual([1, 2, 3, 4, 11, 12, 13, 21, 22, 111].map(ordinal), ['1st', '2nd', '3rd', '4th', '11th', '12th', '13th', '21st', '22nd', '111th'])
   assert.deepEqual([usd(5000), usd(1250), usd(-300, true), usd(4500, true), usd(123456)], ['$50', '$12.50', '−$3', '+$45', '$1,234.56'])
+})
+
+test('timer rolls average out at the mean and never go under the minimum', () => {
+  const rolls = Array.from({ length: 20000 }, () => roll({ mean: 20, stdev: 5, min: 10 }) / 6e4)
+  assert.ok(Math.min(...rolls) >= 10)
+  assert.ok(Math.abs(rolls.reduce((a, b) => a + b) / rolls.length - 20) < 0.2)
+  assert.equal(roll({ mean: 20, stdev: 100, min: 10 }, () => 0.5), 10 * 6e4) // z ≈ −1.18 → clamped
 })
