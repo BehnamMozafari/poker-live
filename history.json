@@ -4,7 +4,9 @@
     { "id": "d9ca15c8", "name": "Ivan", "color": "blue" },
     { "id": "3f6d1dc1", "name": "Behnam", "color": "black" },
     { "id": "391c5898", "name": "Rowan", "color": "white" },
-    { "id": "73b5ce21", "name": "Prakrit", "color": "purple" }
+    { "id": "73b5ce21", "name": "Prakrit", "color": "purple" },
+    { "id": "f903a901", "name": "Andre", "color": "orange" },
+    { "id": "ee46e866", "name": "Aryan", "color": "yellow" }
   ],
   "sessions": [
     {
@@ -38,6 +40,62 @@
       "banker": true,
       "host": "73b5ce21",
       "endedAt": 1792590406448
+    },
+    {
+      "id": "9436b7be",
+      "name": "Tuesday Night",
+      "startedAt": 1792526400000,
+      "defaultBuyIn": 5000,
+      "events": [
+        { "t": 1792526400000, "type": "adjust", "player": "391c5898", "cents": -15000 },
+        { "t": 1792526401000, "type": "adjust", "player": "3f6d1dc1", "cents": 26110 },
+        { "t": 1792526402000, "type": "adjust", "player": "7e3665f0", "cents": 2175 },
+        { "t": 1792526403000, "type": "adjust", "player": "d9ca15c8", "cents": 4210 },
+        { "t": 1792526404000, "type": "adjust", "player": "73b5ce21", "cents": -17495 }
+      ],
+      "endedAt": 1792539000000
+    },
+    {
+      "id": "4cf82def",
+      "name": "Wednesday Night",
+      "startedAt": 1792612800000,
+      "defaultBuyIn": 5000,
+      "events": [
+        { "t": 1792612800000, "type": "buyin", "player": "d9ca15c8", "cents": 38000 },
+        { "t": 1792612801000, "type": "buyin", "player": "391c5898", "cents": 5000 },
+        { "t": 1792612802000, "type": "buyin", "player": "3f6d1dc1", "cents": 20000 },
+        { "t": 1792612803000, "type": "buyin", "player": "7e3665f0", "cents": 10000 },
+        { "t": 1792612804000, "type": "buyin", "player": "73b5ce21", "cents": 20000 },
+        { "t": 1792625100000, "type": "cashout", "player": "391c5898", "cents": 24650 },
+        { "t": 1792625101000, "type": "cashout", "player": "3f6d1dc1", "cents": 5000 },
+        { "t": 1792625102000, "type": "cashout", "player": "7e3665f0", "cents": 29595 },
+        { "t": 1792625103000, "type": "cashout", "player": "d9ca15c8", "cents": 0 },
+        { "t": 1792625104000, "type": "cashout", "player": "73b5ce21", "cents": 33730 }
+      ],
+      "endedAt": 1792625400000
+    },
+    {
+      "id": "9e00592a",
+      "name": "Thursday Night",
+      "startedAt": 1792699200000,
+      "defaultBuyIn": 5000,
+      "events": [
+        { "t": 1792699200000, "type": "buyin", "player": "391c5898", "cents": 25000 },
+        { "t": 1792699201000, "type": "buyin", "player": "f903a901", "cents": 20000 },
+        { "t": 1792699202000, "type": "buyin", "player": "ee46e866", "cents": 5000 },
+        { "t": 1792699203000, "type": "buyin", "player": "d9ca15c8", "cents": 5000 },
+        { "t": 1792699204000, "type": "buyin", "player": "7e3665f0", "cents": 23000 },
+        { "t": 1792699205000, "type": "buyin", "player": "3f6d1dc1", "cents": 22500 },
+        { "t": 1792699206000, "type": "buyin", "player": "73b5ce21", "cents": 10000 },
+        { "t": 1792711500000, "type": "cashout", "player": "391c5898", "cents": 0 },
+        { "t": 1792711501000, "type": "cashout", "player": "f903a901", "cents": 0 },
+        { "t": 1792711502000, "type": "cashout", "player": "ee46e866", "cents": 8630 },
+        { "t": 1792711503000, "type": "cashout", "player": "d9ca15c8", "cents": 12850 },
+        { "t": 1792711504000, "type": "cashout", "player": "7e3665f0", "cents": 8700 },
+        { "t": 1792711505000, "type": "cashout", "player": "3f6d1dc1", "cents": 50285 },
+        { "t": 1792711506000, "type": "cashout", "player": "73b5ce21", "cents": 30050 }
+      ],
+      "endedAt": 1792711800000
     }
   ]
 }
