@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
-import { CHIPS, ink, usd, ordinal, clock, dur, lines, delta, type Session, type Line, type Event, type Who, type Player, type Leader, type Fact, type Payment } from './data.ts'
+import { CHIPS, ink, usd, ordinal, clock, dur, lines, delta, type Session, type Line, type Event, type Who, type Player, type Leader, type Fact } from './data.ts'
+import type { Payment } from './settle.ts'
 import { sfx } from './audio.ts'
 
 export const vars = (o: Record<string, string | number>) => o as CSSProperties

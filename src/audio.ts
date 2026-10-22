@@ -7,13 +7,11 @@ function init() {
   if (ctx) return ctx
   ctx = new AudioContext()
   master = gain(vol, ctx.destination)
-  const lofi = ctx.createBiquadFilter()
-  lofi.frequency.value = 3400
+  const lofi = filter('lowpass', 3400)
   lofi.connect(master)
   music = gain(MUSIC, lofi)
   fx = gain(1, master)
-  low = filter('lowpass', 520)
-  low.connect(music)
+  ;(low = filter('lowpass', 520)).connect(music)
   noise = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate)
   noise.getChannelData(0).forEach((_, i, a) => (a[i] = Math.random() * 2 - 1))
   // Rhodes tremolo
@@ -208,33 +206,30 @@ function clink(t: number, v: number) {
   burst(t, v * 0.8, 0.003, ['highpass', 5000], fx)
 }
 
-export const sfx = {
+const sounds = {
   buyin(rebuy: boolean) {
-    if (!ctx) return
     const t = duck(1.2)
     if (rebuy) burst(t, 0.12, 0.25, ['bandpass', 1200, 0.8], fx) // whoosh under the lower third
     ;[0, 0.08, 0.14, 0.19].forEach((d, i) => clink(t + 0.25 + d, 0.22 - i * 0.03))
   },
   cashout() {
-    if (!ctx) return
     const t = duck(1.6)
     ;[0, 0.05, 0.09, 0.12, 0.16].forEach(d => clink(t + d, 0.15))
     ;[1568, 2093, 2637].forEach((f, i) => tone('triangle', f, t + 0.2 + i * 0.07, 0.12, 0.4, fx))
   },
   drumroll(len: number) {
-    if (!ctx) return
     const t = duck(len + 2)
     for (let d = 0; d < len; d += 0.045) burst(t + d, 0.04 + (0.3 * d) / len, 0.05, ['bandpass', 2000, 0.5], fx)
   },
   crash() {
-    if (!ctx) return
     const t = duck(2.5)
     burst(t, 0.45, 0.7, ['highpass', 3500], fx)
     tone('sine', 70, t, 0.8, 0.25, fx)
   },
   tick() {
-    if (!ctx) return
-    tone('sine', 140, ctx.currentTime, 0.4, 0.06, fx)
-    clink(ctx.currentTime, 0.08)
+    tone('sine', 140, ctx!.currentTime, 0.4, 0.06, fx)
+    clink(ctx!.currentTime, 0.08)
   },
 }
+// Silent until the first click has created the AudioContext.
+export const sfx = Object.fromEntries(Object.entries(sounds).map(([k, f]) => [k, (...a: [never]) => ctx && f(...a)])) as typeof sounds

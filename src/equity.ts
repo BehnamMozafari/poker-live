@@ -1,9 +1,7 @@
-export const RANKS = ['2', '3', '4', '5', '6', '7', '8', '9', 'T', 'J', 'Q', 'K', 'A']
-export const SUITS = ['s', 'h', 'd', 'c']
-export const DECK = SUITS.flatMap(s => RANKS.map(r => r + s))
+const RANKS = ['2', '3', '4', '5', '6', '7', '8', '9', 'T', 'J', 'Q', 'K', 'A']
+const DECK = ['s', 'h', 'd', 'c'].flatMap(s => RANKS.map(r => r + s))
 
-const RANK_VAL: Record<string, number> = {}
-RANKS.forEach((r, i) => (RANK_VAL[r] = i + 2))
+const RANK_VAL: Record<string, number> = Object.fromEntries(RANKS.map((r, i) => [r, i + 2]))
 const rankVal = (code: string) => RANK_VAL[code[0]]
 
 // Every 5-of-7 index combination, built once — lets the hot loop below read straight from the 7-card
@@ -59,7 +57,6 @@ export function best7(cards: string[]): number {
 // Lazy k-combinations of `arr`, in lexicographic index order — avoids materialising millions of arrays up front.
 function* combosGen<T>(arr: T[], k: number): Generator<T[]> {
   const n = arr.length
-  if (k > n) return
   const idx = Array.from({ length: k }, (_, i) => i)
   while (true) {
     yield idx.map(i => arr[i])
@@ -83,27 +80,27 @@ function* sample<T>(arr: T[], k: number, n: number): Generator<T[]> {
   }
 }
 
-export const choose = (n: number, k: number) => Array.from({ length: k }, (_, i) => (n - i) / (i + 1)).reduce((a, b) => a * b, 1)
+const choose = (n: number, k: number) => Array.from({ length: k }, (_, i) => (n - i) / (i + 1)).reduce((a, b) => a * b, 1)
 // ponytail: past this many runouts (preflop has 1.7M, a 1-card board 178k) sample instead, ±0.4% at 95%; raise it for accuracy
 export const SAMPLES = 50000
 
-export type EquityTally = { a: number; b: number; tie: number; total: number }
+// `of` = runouts this run will count; `sampled` = they're random, not every completion.
+export type EquityTally = { a: number; b: number; tie: number; total: number; of: number; sampled: boolean }
 
 // Heads-up equity: every completion of the board when there are at most SAMPLES, else SAMPLES random ones.
 // Yields progress every 2000 runouts so the caller can spread the work across ticks instead of blocking the main thread.
 export function* runEquity(holeA: string[], holeB: string[], board: string[]): Generator<EquityTally, EquityTally, void> {
   const used = new Set([...holeA, ...holeB, ...board])
   const deck = DECK.filter(c => !used.has(c))
-  const need = 5 - board.length
-  let a = 0, b = 0, tie = 0, total = 0, i = 0 // prettier-ignore
-  for (const extra of choose(deck.length, need) > SAMPLES ? sample(deck, need, SAMPLES) : combosGen(deck, need)) {
+  const need = 5 - board.length, all = choose(deck.length, need), sampled = all > SAMPLES, of = sampled ? SAMPLES : all
+  let a = 0, b = 0, tie = 0, total = 0 // prettier-ignore
+  for (const extra of sampled ? sample(deck, need, SAMPLES) : combosGen(deck, need)) {
     const full = [...board, ...extra]
     const va = best7([...holeA, ...full]), vb = best7([...holeB, ...full]) // prettier-ignore
     if (va > vb) a++
     else if (va < vb) b++
     else tie++
-    total++
-    if (++i % 2000 === 0) yield { a, b, tie, total }
+    if (++total % 2000 === 0) yield { a, b, tie, total, of, sampled }
   }
-  return { a, b, tie, total }
+  return { a, b, tie, total, of, sampled }
 }

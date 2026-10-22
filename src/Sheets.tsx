@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { CHIPS, DEFAULTS, ink, usd, cents, clock, uid, nightName, lines, live, ended, leaderboard, profitSeries, payments, parse, type Data, type Mut, type Who, type Session, type Settings } from './data.ts'
-import { split } from './settle.ts'
-import { runEquity, choose, SAMPLES, type EquityTally } from './equity.ts'
+import { CHIPS, ink, usd, cents, clock, uid, nightName, lines, live, ended, leaderboard, profitSeries, payments, restore, inPlay, buyIn, cashOut, startNight, fixChips, type Data, type Mut, type Who, type Session, type Settings } from './data.ts'
+import { runEquity, type EquityTally } from './equity.ts'
 import { Avatar, vars } from './Board.tsx'
 
 type P = { data: Data; mut: Mut; who: Who; onClose: () => void }
@@ -42,10 +41,11 @@ function Swatches({ value, onChange }: { value: string; onChange: (c: string) =>
 }
 
 function Money({ value, onChange }: { value: number; onChange: (c: number) => void }) {
-  const [v, setV] = useState(value ? String(value / 100) : '')
+  const [v, setV] = useState('')
+  const shown = cents(v) === value ? v : value ? String(value / 100) : '' // keeps "12." while typing, follows outside changes (import)
   return (
     <span className="money-in">
-      $<input inputMode="decimal" value={v} onChange={e => (setV(e.target.value), onChange(cents(e.target.value)))} />
+      $<input inputMode="decimal" value={shown} onChange={e => (setV(e.target.value), onChange(cents(e.target.value)))} />
     </span>
   )
 }
@@ -86,9 +86,9 @@ export function PlayerSheet({ data, mut, who, onClose, id }: P & { id: string })
   const [typed, setTyped] = useState<string | null>(null)
   const chipTotal = Object.entries(counts).reduce((s, [c, n]) => s + (parseInt(n) || 0) * (denoms[c] ?? 0), 0)
   const out = typed !== null ? cents(typed) : chipTotal
-  const act = (type: 'buyin' | 'cashout', c: number) => {
-    if (c <= 0 && type === 'buyin') return
-    mut(d => void live(d)!.events.push({ t: Date.now(), type, player: id, cents: c }))
+  const act = (verb: typeof buyIn, c: number) => {
+    const t = Date.now()
+    mut(d => verb(d, id, c, t))
     onClose()
   }
   return (
@@ -110,11 +110,11 @@ export function PlayerSheet({ data, mut, who, onClose, id }: P & { id: string })
       <h3>{!l ? 'Buy in' : l.seated ? 'Rebuy' : 'Back in'}</h3>
       <div className="chips-row">
         {amounts(data.settings, night.defaultBuyIn).map((c, i) => (
-          <button key={c} className={`chipbtn${c === night.defaultBuyIn ? ' def' : ''}`} style={chipStyle(BTN_CHIPS[i % 5])} onClick={() => act('buyin', c)}>
+          <button key={c} className={`chipbtn${c === night.defaultBuyIn ? ' def' : ''}`} style={chipStyle(BTN_CHIPS[i % 5])} onClick={() => act(buyIn, c)}>
             {usd(c)}
           </button>
         ))}
-        <form className="custom" onSubmit={e => (e.preventDefault(), act('buyin', cents(custom)))}>
+        <form className="custom" onSubmit={e => (e.preventDefault(), cents(custom) && act(buyIn, cents(custom)))}>
           <span className="money-in">
             $<input inputMode="decimal" placeholder="Other" value={custom} onChange={e => setCustom(e.target.value)} />
           </span>
@@ -135,7 +135,7 @@ export function PlayerSheet({ data, mut, who, onClose, id }: P & { id: string })
                 </label>
               ))}
           </div>
-          <form className="cashout" onSubmit={e => (e.preventDefault(), act('cashout', out))}>
+          <form className="cashout" onSubmit={e => (e.preventDefault(), act(cashOut, out))}>
             <span className="money-in big">
               $<input inputMode="decimal" placeholder="0" aria-label="Cash-out total" value={typed ?? (chipTotal ? String(chipTotal / 100) : '')} onChange={e => setTyped(e.target.value)} />
             </span>
@@ -153,13 +153,17 @@ export function AddSheet({ data, mut, onClose, onPick, q: q0 = '' }: P & { onPic
   const night = live(data)!, played = new Set(lines(night).map(l => l.id))
   const [amt, setAmt] = useState(night.defaultBuyIn)
   const [q, setQ] = useState(q0)
-  const seat = (id: string) => (mut(d => void live(d)!.events.push({ t: Date.now(), type: 'buyin', player: id, cents: amt })), onClose())
+  const seat = (id: string) => {
+    const t = Date.now()
+    mut(d => buyIn(d, id, amt, t))
+    onClose()
+  }
   const pick = (id: string) => (played.has(id) ? onPick(id) : seat(id))
   const s = q.trim().toLowerCase(), starts = (n: string) => +n.toLowerCase().startsWith(s)
   const hits = s ? data.players.filter(p => p.name.toLowerCase().includes(s)).sort((a, b) => starts(b.name) - starts(a.name)) : data.players.filter(p => !played.has(p.id))
   const go = () => {
+    if (!s) return // an empty Enter never seats anyone
     if (hits[0]) return pick(hits[0].id)
-    if (!s) return
     const id = uid()
     mut(d => void d.players.push({ id, name: q.trim(), color: freeColor(d) }))
     seat(id)
@@ -170,7 +174,7 @@ export function AddSheet({ data, mut, onClose, onPick, q: q0 = '' }: P & { onPic
       <Seg options={amounts(data.settings, night.defaultBuyIn).map(c => [c, usd(c)])} value={amt} onChange={setAmt} />
       <form className="find" onSubmit={e => (e.preventDefault(), go())}>
         <input data-autofocus placeholder="Type a name, Enter" value={q} maxLength={16} onChange={e => setQ(e.target.value)} />
-        <span className="dim">{hits[0] ? `↵ ${played.has(hits[0].id) ? 'open' : 'seat'} ${hits[0].name}` : s ? `↵ add ${q.trim()} as new` : ''}</span>
+        <span className="dim">{s && hits[0] ? `↵ ${played.has(hits[0].id) ? 'open' : 'seat'} ${hits[0].name}` : s ? `↵ add ${q.trim()} as new` : ''}</span>
       </form>
       {hits.length > 0 && (
         <>
@@ -216,7 +220,8 @@ export function NewNight({ data, mut, onClose }: P) {
     })
   const start = () => {
     const t = Date.now()
-    mut(d => void d.sessions.push({ id: uid(), name: name.trim() || nightName(), startedAt: t, defaultBuyIn: amt, events: [...pick].map((player, i) => ({ t: t + i, type: 'buyin', player, cents: amt })) }))
+    const id = uid()
+    mut(d => startNight(d, id, name.trim() || nightName(), amt, [...pick], t))
     onClose()
   }
   return (
@@ -333,12 +338,10 @@ function PayList({ s, who }: { s: Session; who: Who }) {
 
 export function SettleSheet({ data, mut, who, onClose, onPick, onReveal }: P & { onPick: (id: string) => void; onReveal: () => void }) {
   const night = live(data)!, ls = lines(night), seated = ls.filter(l => l.seated)
-  const diff = ls.reduce((a, l) => a + l.out + l.adj - l.in, 0) // + = more chips cashed out than bought
+  const diff = -inPlay(night) // + = more chips cashed out than bought
   const fix = () => {
-    const unit = diff % 100 ? 1 : 100 // whole-dollar gaps split in whole dollars
-    const adj = split(-diff / unit, Object.fromEntries(ls.map(l => [l.id, l.out])))
     const t = Date.now()
-    mut(d => void live(d)!.events.push(...Object.entries(adj).filter(([, c]) => c).map(([player, c]) => ({ t, type: 'adjust' as const, player, cents: c * unit }))))
+    mut(d => fixChips(d, t))
   }
   if (!ls.length)
     return (
@@ -610,8 +613,8 @@ export function SettingsSheet({ data, mut, onClose }: P) {
               e.target.value = ''
               if (!f) return
               try {
-                const d = parse(await f.text())
-                if (confirm(`Replace everything here with ${d.players.length} players and ${d.sessions.length} nights from ${f.name}?`)) mut(x => void Object.assign(x, d, { settings: { ...DEFAULTS, ...d.settings } }))
+                const d = restore(await f.text())
+                if (confirm(`Replace everything here with ${d.players.length} players and ${d.sessions.length} nights from ${f.name}?`)) mut(x => void Object.assign(x, d))
               } catch (err) {
                 alert(String(err))
               }
@@ -691,7 +694,7 @@ export function EquitySheet({ onClose }: { onClose: () => void }) {
     step()
     return () => clearTimeout(t)
   }, [slots.join('|')])
-  const all = choose(48 - slots[2].length, 5 - slots[2].length), total = Math.min(all, SAMPLES), A = ink('blue'), B = ink('red')
+  const A = ink('blue'), B = ink('red')
   return (
     <Sheet title="Odds" wide onClose={onClose}>
       <div className="slots">
@@ -723,8 +726,8 @@ export function EquitySheet({ onClose }: { onClose: () => void }) {
           <p className="eqnums num">
             <b style={{ color: A }}>A {pct(res.a, res.total)}</b>
             <span className="dim">
-              tie {pct(res.tie, res.total)} · {res.total < total ? `${pct(res.total, total)} of ` : ''}
-              {total.toLocaleString()} {all > SAMPLES ? 'sampled ' : ''}runouts
+              tie {pct(res.tie, res.total)} · {res.total < res.of ? `${pct(res.total, res.of)} of ` : ''}
+              {res.of.toLocaleString()} {res.sampled ? 'sampled ' : ''}runouts
             </span>
             <b style={{ color: B }}>B {pct(res.b, res.total)}</b>
           </p>

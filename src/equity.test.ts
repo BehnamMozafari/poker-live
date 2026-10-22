@@ -39,7 +39,7 @@ test('best5 picks the best 5 of 7: trips plus the two highest kickers', () => {
 
 test('a made board straight that neither hole pair improves is a guaranteed chop', () => {
   const r = drain(runEquity(['2c', '2d'], ['Qc', 'Qd'], ['3h', '4d', '5c', '6s', '7h']))
-  assert.deepEqual(r, { a: 0, b: 0, tie: 1, total: 1 })
+  assert.deepEqual(r, { a: 0, b: 0, tie: 1, total: 1, of: 1, sampled: false })
 })
 
 test('an unbeatable made flush wins every runout on the turn', () => {

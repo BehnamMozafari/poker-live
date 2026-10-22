@@ -1,20 +1,11 @@
 import { StrictMode, useEffect, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
-import { load, save, parse, live, ended, lines, facts, leaderboard, profitSeries, payments, usd, roll, type Data, type Event, type Mut, type Who } from './data.ts'
+import { load, save, live, ended, facts, leaderboard, profitSeries, payments, announce, usd, roll, type News, type Mut, type Who } from './data.ts'
 import { unlock, setMusic, setVolume, sfx } from './audio.ts'
 import { vars, ChipDefs, Header, LiveBoard, Leaders, Facts, Ticker, Toast, Final, Home, Ambient } from './Board.tsx'
 import { PlayerSheet, AddSheet, NewNight, LogSheet, SettleSheet, HistorySheet, SettingsSheet, SeatsSheet, EquitySheet } from './Sheets.tsx'
 import './index.css'
-import history from '../history.json?raw'
-
-// The committed history seeds every browser: nights and players it has that this one doesn't are added, nothing saved is overwritten.
-// ponytail: a committed night deleted locally comes back on reload; track deleted ids if that bites.
-try {
-  const d = parse(localStorage.getItem('poker-live') ?? history), h = parse(history), has = (xs: { id: string }[], x: { id: string }) => xs.some(y => y.id === x.id)
-  d.players.push(...h.players.filter(p => !has(d.players, p)))
-  d.sessions.push(...h.sessions.filter(s => !has(d.sessions, s)))
-  localStorage.setItem('poker-live', JSON.stringify(d))
-} catch {}
+import seed from '../history.json?raw'
 
 type SheetKind = 'add' | 'new' | 'log' | 'settle' | 'history' | 'settings' | 'seats' | 'odds'
 type Open = { kind: 'player'; id: string; back?: SheetKind } | { kind: SheetKind; q?: string } | null
@@ -29,16 +20,17 @@ const T = ({ icon, label, on, primary, off }: { icon: string; label: string; on:
 )
 
 function App() {
-  const [data, setData] = useState(load)
+  const [data, setData] = useState(() => load(seed))
   const [sheet, setSheet] = useState<Open>(null)
   const [final, setFinal] = useState(false)
   const [awake, setAwake] = useState(true)
   const [panel, setPanel] = useState(0)
   const [now, setNow] = useState(Date.now)
-  const [third, setThird] = useState<Event>()
+  const [third, setThird] = useState<News>()
   const [due, setDue] = useState<number>() // hidden timer: when it next goes off
   const [alarm, setAlarm] = useState<number>()
-  const seen = useRef(Date.now())
+  const latest = useRef(data) // for window listeners registered once
+  latest.current = data
 
   const mut: Mut = fn => setData(d => { const n = structuredClone(d); fn(n); return n }) // prettier-ignore
   const byId = new Map(data.players.map(p => [p.id, p]))
@@ -52,21 +44,17 @@ function App() {
     return () => clearInterval(i)
   }, [])
 
-  // A new event (never undo/delete) → toast + sound, and jump to the live board.
-  // Several at once (dealing everyone in, chip fixes) get no toast.
-  const last = night?.events.at(-1)
-  const count = useRef(0)
+  // News → toast + sound, and jump to the live board.
+  const prev = useRef(night)
   useEffect(() => {
-    const added = (night?.events.length ?? 0) - count.current
-    count.current = night?.events.length ?? 0
-    if (!night || !last || last.t <= seen.current) return
-    seen.current = last.t
-    if (last.type === 'adjust' || added > 1) return
-    setThird(last)
+    const n = announce(prev.current, night)
+    prev.current = night
+    if (!n) return
+    setThird(n)
     setPanel(0)
-    if (last.type === 'cashout') sfx.cashout()
-    else sfx.buyin(lines(night).find(l => l.id === last.player)!.buyins > 1)
-  }, [last])
+    if (n.e.type === 'cashout') sfx.cashout()
+    else sfx.buyin(n.line.buyins > 1)
+  }, [night])
   useEffect(() => {
     if (!third) return
     const t = setTimeout(() => setThird(undefined), 5200)
@@ -74,7 +62,8 @@ function App() {
   }, [third])
 
   useEffect(() => {
-    if (!due || !night) return
+    if (!due) return
+    if (!night) return setDue(undefined) // night over: the next one starts with the timer off
     const t = setTimeout(() => (sfx.crash(), setAlarm(Date.now()), setDue(Date.now() + roll(data.settings.timer))), due - Date.now())
     return () => clearTimeout(t)
   }, [due, !night])
@@ -114,7 +103,7 @@ function App() {
       if ((e.metaKey || e.ctrlKey) && e.key === 'z') e.preventDefault(), undo()
       else if (e.key === 'f' && !e.metaKey && !e.ctrlKey) fullscreen()
       // ponytail: lowercase f stays fullscreen, so a name starting with F needs Shift
-      else if (/^[a-z]$/i.test(e.key) && !e.metaKey && !e.ctrlKey && !e.altKey && live(load())) e.preventDefault(), setSheet(s => s ?? { kind: 'add', q: e.key })
+      else if (/^[a-z]$/i.test(e.key) && !e.metaKey && !e.ctrlKey && !e.altKey && live(latest.current)) e.preventDefault(), setSheet(s => s ?? { kind: 'add', q: e.key })
     }
     addEventListener('keydown', k)
     return () => removeEventListener('keydown', k)
@@ -122,7 +111,7 @@ function App() {
 
   // Audio needs a user gesture; the host's first click starts it.
   useEffect(() => {
-    const go = () => (unlock(), setMusic(load().settings.music))
+    const go = () => (unlock(), setMusic(latest.current.settings.music))
     addEventListener('pointerdown', go, { once: true })
     return () => removeEventListener('pointerdown', go)
   }, [])
@@ -155,7 +144,7 @@ function App() {
           {final && night ? (
             <Final night={night} who={who} pays={payments(night)} />
           ) : cur === 'board' && night ? (
-            <LiveBoard night={night} who={who} flash={third?.player} onPick={id => setSheet({ kind: 'player', id })} />
+            <LiveBoard night={night} who={who} flash={third?.e.player} onPick={id => setSheet({ kind: 'player', id })} />
           ) : cur === 'leaders' ? (
             <Leaders rows={lb} who={who} nights={history.length} series={profitSeries(history)} />
           ) : cur === 'facts' ? (
@@ -200,7 +189,7 @@ function App() {
           <Ticker tag={night ? 'Tonight' : 'Poker Live'} items={ticker.length ? ticker : ['Move the mouse for controls', 'Click a player to rebuy or cash out', '⌘Z undoes', 'F for fullscreen']} />
         )}
       </div>
-      {third && night && <Toast key={third.t} e={third} line={lines(night).find(l => l.id === third.player)!} p={who(third.player)} />}
+      {third && <Toast key={third.e.t} {...third} p={who(third.e.player)} />}
       {sheet?.kind === 'player' && night && <PlayerSheet key={sheet.id} {...props} id={sheet.id} />}
       {alarm && (
         <div key={alarm} className="toast" style={vars({ '--c': 'var(--amber)' })}>

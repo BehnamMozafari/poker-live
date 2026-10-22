@@ -10,4 +10,4 @@ npm start   # http://localhost:5199
 npm test
 ```
 
-`history.json` holds our game history; a browser with nothing saved starts from it. Update it with Settings → Export JSON. Design notes: [docs/plan.md](docs/plan.md).
+`history.json` holds our game history; every browser gets the nights and players in it that it doesn't already have. Update it with Settings → Export JSON. Design notes: [docs/plan.md](docs/plan.md).

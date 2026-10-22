@@ -1,6 +1,5 @@
-import { settle, banker, type Payment } from './settle.ts'
+import { settle, banker, split, type Payment } from './settle.ts'
 
-export type { Payment }
 export type Player = { id: string; name: string; color: string }
 export type Event = { t: number; type: 'buyin' | 'cashout' | 'adjust'; player: string; cents: number }
 export type Session = { id: string; name: string; startedAt: number; endedAt?: number; defaultBuyIn: number; banker?: boolean; host?: string; events: Event[] }
@@ -19,10 +18,10 @@ export const ink = (color: string) => (CHIPS[color] ?? CHIPS.gray)[2]
 export type Mut = (fn: (d: Data) => void) => void
 export type Who = (id: string) => Player
 
-// Minutes until the hidden timer goes off: normal(mean, stdev) by Box–Muller, never under `min`. Returns ms.
-export const roll = ({ mean, stdev, min }: Timer, r = Math.random) => Math.max(min, mean + stdev * Math.sqrt(-2 * Math.log(1 - r())) * Math.cos(2 * Math.PI * r())) * 6e4
+// Minutes until the hidden timer goes off: normal(mean, stdev) by Box–Muller, never under `min` (or 1, so zeroed settings can't loop). Returns ms.
+export const roll = ({ mean, stdev, min }: Timer, r = Math.random) => Math.max(min, 1, mean + stdev * Math.sqrt(-2 * Math.log(1 - r())) * Math.cos(2 * Math.PI * r())) * 6e4
 
-export const DEFAULTS: Settings = {
+const DEFAULTS: Settings = {
   defaultBuyIn: 5000,
   buyIns: [2500, 5000, 10000],
   denoms: { white: 100, red: 500, blue: 1000, green: 2500, black: 10000 },
@@ -31,26 +30,35 @@ export const DEFAULTS: Settings = {
   timer: { mean: 20, stdev: 5, min: 10 },
 }
 
+// Storage: the only code that knows the key or fills in missing settings.
 const KEY = 'poker-live'
-export function load(): Data {
+export function load(seed: string): Data {
+  const s = restore(seed)
   try {
-    const d = parse(localStorage.getItem(KEY) ?? '')
-    return { ...d, settings: { ...DEFAULTS, ...d.settings } }
+    return merge(restore(localStorage.getItem(KEY) ?? seed), s)
   } catch {
-    return { players: [], sessions: [], settings: DEFAULTS }
+    return s
   }
 }
 export const save = (d: Data) => localStorage.setItem(KEY, JSON.stringify(d))
-export function parse(json: string): Data {
+// A backup (or the committed history), checked and with today's settings defaults filled in.
+export function restore(json: string): Data {
   const d = JSON.parse(json)
   if (!Array.isArray(d?.players) || !Array.isArray(d?.sessions)) throw new Error('Not a Poker Live backup')
-  return d
+  return { ...d, settings: { ...DEFAULTS, ...d.settings } }
+}
+// The committed history seeds every browser: players and nights it has that `saved` doesn't are added, nothing saved is overwritten.
+// ponytail: a committed night deleted locally comes back on reload; track deleted ids if that bites.
+export function merge(saved: Data, seed: Data): Data {
+  const add = <T extends { id: string }>(xs: T[], ys: T[]) => [...xs, ...ys.filter(y => !xs.some(x => x.id === y.id))]
+  return { ...saved, players: add(saved.players, seed.players), sessions: add(saved.sessions, seed.sessions) }
 }
 
 export const uid = () => crypto.randomUUID().slice(0, 8)
 export const usd = (c: number, sign = false) =>
   (c < 0 ? '−' : sign && c > 0 ? '+' : '') + '$' + (Math.abs(c) / 100).toLocaleString('en-US', { minimumFractionDigits: c % 100 ? 2 : 0, maximumFractionDigits: 2 })
-export const cents = (dollars: string) => Math.round(parseFloat(dollars) * 100) || 0
+// Typed dollars → cents. "$1,000" works; anything negative or not a number is 0, never a partial parse.
+export const cents = (dollars: string) => { const v = Number(dollars.replace(/[$,\s]/g, '')); return v > 0 ? Math.round(v * 100) : 0 } // prettier-ignore
 export const ordinal = (n: number) => n + (n % 100 > 10 && n % 100 < 14 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] ?? 'th')
 export const dur = (ms: number) => { const m = Math.round(ms / 6e4); return m < 60 ? `${m}m` : `${(m / 60) | 0}h ${m % 60}m` }
 export const clock = (t: number) => new Date(t).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
@@ -77,6 +85,32 @@ export function lines(s: Session): Line[] {
 // Chip fixes (adjust) count like cash-outs, so a settled night has $0 in play.
 export const delta = (e: Event) => (e.type === 'buyin' ? e.cents : -e.cents)
 export const inPlay = (s: Session) => s.events.reduce((a, e) => a + delta(e), 0)
+
+// Night verbs: the writes to the event log that carry rules. `t` comes from the caller, since mut() runs twice under StrictMode.
+export function buyIn(d: Data, player: string, cents: number, t: number) {
+  if (cents > 0) live(d)!.events.push({ t, type: 'buyin', player, cents })
+}
+export function cashOut(d: Data, player: string, cents: number, t: number) {
+  live(d)!.events.push({ t, type: 'cashout', player, cents: Math.max(0, cents) })
+}
+export function startNight(d: Data, id: string, name: string, cents: number, players: string[], t: number) {
+  d.sessions.push({ id, name, startedAt: t, defaultBuyIn: cents, events: [] })
+  players.forEach((p, i) => buyIn(d, p, cents, t + i))
+}
+// Chip mismatch: spread what's left in play over the cash-outs as `adjust` events, in whole dollars when the gap is whole dollars.
+export function fixChips(d: Data, t: number) {
+  const s = live(d)!, gap = inPlay(s), unit = gap % 100 ? 1 : 100
+  const adj = split(gap / unit, Object.fromEntries(lines(s).map(l => [l.id, l.out])))
+  s.events.push(...Object.entries(adj).filter(([, c]) => c).map(([player, c]) => ({ t, type: 'adjust' as const, player, cents: c * unit })))
+}
+
+// What the TV announces after a change to tonight's log: exactly one new buy-in or cash-out (not undo, a deal-in or chip fixes).
+export type News = { e: Event; line: Line }
+export function announce(prev?: Session, next?: Session): News | undefined {
+  const e = next?.events.at(-1)
+  if (!prev || !e || prev.id !== next!.id || next!.events.length !== prev.events.length + 1 || e.type === 'adjust') return
+  return { e, line: lines(next!).find(l => l.id === e.player)! }
+}
 
 export type Fact = { k: string; id?: string; v: string }
 export function facts(s: Session, now = Date.now()): Fact[] {
