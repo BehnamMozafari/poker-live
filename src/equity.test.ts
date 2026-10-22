@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { best7, decode, runEquity, type EquityTally } from './equity.ts'
+import { best7, decode, runEquity, SAMPLES, type EquityTally } from './equity.ts'
 
 const best5 = (cards: string[]) => decode(best7(cards))
 
@@ -48,4 +48,10 @@ test('an unbeatable made flush wins every runout on the turn', () => {
   assert.equal(r.a, 44)
   assert.equal(r.b, 0)
   assert.equal(r.tie, 0)
+})
+
+test('preflop samples SAMPLES runouts and lands near the exact AA vs KK equity (82.4%)', () => {
+  const r = drain(runEquity(['As', 'Ah'], ['Ks', 'Kh'], []))
+  assert.equal(r.total, SAMPLES)
+  assert.ok(Math.abs(r.a / r.total - 0.824) < 0.01, `got ${r.a / r.total}`)
 })

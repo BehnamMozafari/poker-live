@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { CHIPS, DEFAULTS, ink, usd, cents, clock, uid, nightName, lines, live, ended, leaderboard, profitSeries, payments, parse, type Data, type Mut, type Who, type Session, type Settings } from './data.ts'
 import { split } from './settle.ts'
-import { runEquity, DECK, type EquityTally } from './equity.ts'
+import { runEquity, choose, SAMPLES, type EquityTally } from './equity.ts'
 import { Avatar, vars } from './Board.tsx'
 
 type P = { data: Data; mut: Mut; who: Who; onClose: () => void }
@@ -659,7 +659,7 @@ export function SeatsSheet({ data, who, onClose }: P) {
 }
 
 const SUIT: Record<string, string> = { s: '♠', h: '♥', d: '♦', c: '♣' }
-const choose = (n: number, k: number) => Array.from({ length: k }, (_, i) => (n - i) / (i + 1)).reduce((a, b) => a * b, 1)
+const GRID = ['s', 'c', 'd', 'h'].flatMap(s => 'A23456789TJQK'.split('').map(r => r + s))
 const pct = (n: number, of: number) => ((100 * n) / (of || 1)).toFixed(1) + '%'
 
 // Heads-up all-in odds: pick two hands and 0–5 board cards. Exact, worked through in 30ms slices so the UI stays live.
@@ -691,7 +691,7 @@ export function EquitySheet({ onClose }: { onClose: () => void }) {
     step()
     return () => clearTimeout(t)
   }, [slots.join('|')])
-  const total = choose(48 - slots[2].length, 5 - slots[2].length), A = ink('blue'), B = ink('red')
+  const all = choose(48 - slots[2].length, 5 - slots[2].length), total = Math.min(all, SAMPLES), A = ink('blue'), B = ink('red')
   return (
     <Sheet title="Odds" wide onClose={onClose}>
       <div className="slots">
@@ -707,7 +707,7 @@ export function EquitySheet({ onClose }: { onClose: () => void }) {
         ))}
       </div>
       <div className="deck">
-        {DECK.map(c => (
+        {GRID.map(c => (
           <button key={c} className={`card ${c[1]}${used.has(c) ? ' used' : ''}`} onClick={() => tap(c)}>
             {c[0] + SUIT[c[1]]}
           </button>
@@ -724,7 +724,7 @@ export function EquitySheet({ onClose }: { onClose: () => void }) {
             <b style={{ color: A }}>A {pct(res.a, res.total)}</b>
             <span className="dim">
               tie {pct(res.tie, res.total)} · {res.total < total ? `${pct(res.total, total)} of ` : ''}
-              {total.toLocaleString()} runouts
+              {total.toLocaleString()} {all > SAMPLES ? 'sampled ' : ''}runouts
             </span>
             <b style={{ color: B }}>B {pct(res.b, res.total)}</b>
           </p>

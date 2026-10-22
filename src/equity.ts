@@ -71,16 +71,32 @@ function* combosGen<T>(arr: T[], k: number): Generator<T[]> {
   }
 }
 
+// Random k-subsets of `arr`, n of them (partial Fisher–Yates each time, so every subset is equally likely).
+function* sample<T>(arr: T[], k: number, n: number): Generator<T[]> {
+  const a = [...arr]
+  for (let s = 0; s < n; s++) {
+    for (let i = 0; i < k; i++) {
+      const j = i + Math.floor(Math.random() * (a.length - i))
+      ;[a[i], a[j]] = [a[j], a[i]]
+    }
+    yield a.slice(0, k)
+  }
+}
+
+export const choose = (n: number, k: number) => Array.from({ length: k }, (_, i) => (n - i) / (i + 1)).reduce((a, b) => a * b, 1)
+// ponytail: past this many runouts (preflop has 1.7M, a 1-card board 178k) sample instead, ±0.4% at 95%; raise it for accuracy
+export const SAMPLES = 50000
+
 export type EquityTally = { a: number; b: number; tie: number; total: number }
 
-// Exact heads-up equity: enumerates every possible completion of the board. Yields progress every 2000 runouts
-// so the caller can spread the work across ticks (preflop is ~1.7M runouts) instead of blocking the main thread.
+// Heads-up equity: every completion of the board when there are at most SAMPLES, else SAMPLES random ones.
+// Yields progress every 2000 runouts so the caller can spread the work across ticks instead of blocking the main thread.
 export function* runEquity(holeA: string[], holeB: string[], board: string[]): Generator<EquityTally, EquityTally, void> {
   const used = new Set([...holeA, ...holeB, ...board])
   const deck = DECK.filter(c => !used.has(c))
   const need = 5 - board.length
   let a = 0, b = 0, tie = 0, total = 0, i = 0 // prettier-ignore
-  for (const extra of combosGen(deck, need)) {
+  for (const extra of choose(deck.length, need) > SAMPLES ? sample(deck, need, SAMPLES) : combosGen(deck, need)) {
     const full = [...board, ...extra]
     const va = best7([...holeA, ...full]), vb = best7([...holeB, ...full]) // prettier-ignore
     if (va > vb) a++
