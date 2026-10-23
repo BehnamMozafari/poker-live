@@ -46,7 +46,7 @@ if docker exec "$container" psql -U postgres -qAt -v ON_ERROR_STOP=1 -c "$auth_s
   echo 'Concurrent stale save unexpectedly succeeded'; exit 1
 fi
 wait "$first_pid"
-if ! rg -q 'Revision conflict' "$race_dir/second"; then cat "$race_dir/second"; exit 1; fi
+if ! grep -Fq 'Revision conflict' "$race_dir/second"; then cat "$race_dir/second"; exit 1; fi
 revision=$(docker exec "$container" psql -U postgres -qAt -c "$auth_sql select poker_group('$group_id')->>'revision';")
 [[ "$revision" == "1" ]] || { echo "Expected one committed save, got revision $revision"; exit 1; }
 echo 'Concurrent Postgres save conflict test passed'
