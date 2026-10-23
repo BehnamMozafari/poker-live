@@ -6,10 +6,22 @@ cd "$(dirname "$0")/.."
 container="poker-db-test-${RANDOM}-$$"
 trap 'docker rm -f "$container" >/dev/null 2>&1 || true' EXIT
 docker run --rm -d --name "$container" -e POSTGRES_PASSWORD=poker-test postgres:17-alpine >/dev/null
+# The image first starts a temporary Unix-socket-only server for initialization.
+# Wait for an authenticated TCP query so bootstrap cannot race its shutdown.
+postgres_ready=false
 for attempt in {1..60}; do
-  if docker exec "$container" pg_isready -U postgres >/dev/null 2>&1; then break; fi
+  if docker exec -e PGPASSWORD=poker-test -e PGCONNECT_TIMEOUT=2 "$container" \
+    psql -h 127.0.0.1 -U postgres -d postgres -qAt -v ON_ERROR_STOP=1 -c 'SELECT 1' >/dev/null 2>&1; then
+    postgres_ready=true
+    break
+  fi
   sleep 1
 done
+if [[ "$postgres_ready" != true ]]; then
+  echo 'Timed out waiting for the final PostgreSQL server to accept authenticated TCP queries.' >&2
+  docker logs "$container" >&2 || true
+  exit 1
+fi
 docker exec -i "$container" psql -U postgres -v ON_ERROR_STOP=1 < supabase/tests/bootstrap.sql
 for migration in supabase/migrations/*.sql; do
   docker exec -i "$container" psql -U postgres -v ON_ERROR_STOP=1 < "$migration"
